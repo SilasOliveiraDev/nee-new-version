@@ -1,0 +1,197 @@
+{
+  "title": "Ñee! app do usuário",
+  "question": "Qual mundo visual carrega o mapa de profissionais próximos e liberados, a home e as solicitudes?",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Radio de barrio",
+      "kicker": "THE ROLL",
+      "lineage": "Rádio comunitária AM do bairro boliviano: quem está no ar agora",
+      "thesis": "Liberado é estar no ar. A home é a grade, o mapa é o dial, cada profesional é uma frequência que você sintoniza.",
+      "palette": ["#FFD000", "#16140F", "#EEEAE2", "#FBFBF8", "#6F6858"],
+      "materials": ["plástico do rádio de cozinha", "escala AM impressa", "LED de sintonía", "papel de lista de programas"],
+      "viewport": "Telefone: cidade e busca no topo; um bloco amarelo de sintonía com o nome do usuário; categorias em chips; Cerca de ti como faixas no ar. Aba Mapa: dial geográfico, só pins no ar. Solicitudes: cola de chamadas, estado como no ar / esperando / cortada.",
+      "risk": "Se o rádio virar metáfora ilustrada, vira mascote. Tem que ser sintonía de verdade: disponível acende, ocupado some do dial.",
+      "raised": [
+        {
+          "from": "challenger-cracktro",
+          "raise": "Força do sinal: o mais perto no ar pesa mais (tipo, distância, brilho do pin), o resto recua sem caixas extras."
+        },
+        {
+          "from": "challenger-rain",
+          "raise": "Motion de matching: a solicitud procura a frequência; não é confete, é um seek que chega em alguém."
+        },
+        {
+          "from": "challenger-dive",
+          "raise": "Dois planos: o mapa é a banda larga; o pin abre uma ficha próxima, como acender a lâmpada no detalhe."
+        }
+      ],
+      "comp": ".impeccable/mocks/decision/assigned.webp",
+      "wireframe": {
+        "cols": 8,
+        "rows": 14,
+        "regions": [
+          { "label": "ciudad + Ñee", "x": 0, "y": 0, "w": 8, "h": 1 },
+          { "label": "sintonía hola", "x": 0, "y": 1, "w": 8, "h": 3, "accent": true },
+          { "label": "oficios chips", "x": 0, "y": 4, "w": 8, "h": 2 },
+          { "label": "en el aire 1", "x": 0, "y": 6, "w": 8, "h": 2 },
+          { "label": "en el aire 2", "x": 0, "y": 8, "w": 8, "h": 2 },
+          { "label": "tabs: inicio mapa solicitudes", "x": 0, "y": 13, "w": 8, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "model-pick",
+      "label": "Croquis del barrio",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "Plano de urbanización, lotes e callejones de Santa Cruz",
+      "thesis": "O mapa é o produto. Cada lote é um profesional liberado; a lista é a legenda do croquis, não o contrário.",
+      "palette": ["#FFD000", "#16140F", "#EEEAE2", "#FBFBF8"],
+      "materials": ["papel mantequilla", "tinta de croquis", "lote amarelo = liberado", "lote vazio = ocupado"],
+      "viewport": "Aba Mapa em tela cheia como croquis; home aponta para o plano; solicitudes como notas na margem do lote.",
+      "risk": "É o destino mais familiar desta categoria (mapa-primeiro). Pode parecer Uber de oficios se o croquis não for bairro, só pins genéricos.",
+      "comp": ".impeccable/mocks/decision/model-pick.webp",
+      "wireframe": {
+        "cols": 8,
+        "rows": 14,
+        "regions": [
+          { "label": "croquis mapa", "x": 0, "y": 0, "w": 8, "h": 9, "accent": true },
+          { "label": "ficha lote", "x": 0, "y": 9, "w": 8, "h": 4 },
+          { "label": "tabs", "x": 0, "y": 13, "w": 8, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-seven-segment",
+      "label": "Totem de estado",
+      "verdict": "competitive",
+      "lineage": "Display de sete segmentos: relógio, bomba, placar",
+      "thesis": "Disponible acende o segmento; ocupado fica como célula fantasma. Precio, km e estado são dígitos fixos, nunca texto flutuante.",
+      "palette": ["#16140F", "#FFD000", "#EEEAE2", "#1F6B45"],
+      "materials": ["máscara de 8 células", "segmento aceso amarelo", "segmento apagado fantasma", "caixa fosca"],
+      "viewport": "Home: totem de quantos están en el aire. Mapa: pin aceso ou fantasma. Solicitudes: estados como troca instantânea de segmentos, sem slide.",
+      "case": "Ganha clareza de liberado/ocupado; perde identificação (posto de gasolina não é o bairro boliviano).",
+      "risk": "Se cada card virar um relógio LED, o app esfria e deixa de ser Ñee!.",
+      "comp": ".impeccable/mocks/decision/challenger-seven-segment.webp",
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-seven-segment-alarm-clock-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/signals-instruments-seven-segment-alarm-clock.webp",
+      "wireframe": {
+        "cols": 8,
+        "rows": 14,
+        "regions": [
+          { "label": "dígitos en el aire", "x": 0, "y": 0, "w": 8, "h": 3, "accent": true },
+          { "label": "lista máscara", "x": 0, "y": 3, "w": 8, "h": 10 },
+          { "label": "tabs", "x": 0, "y": 13, "w": 8, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-streaming-wall",
+      "label": "Pared de oficios",
+      "verdict": "competitive",
+      "lineage": "Catálogo em trilhos horizontais, o foco cresce e o resto some",
+      "thesis": "Cada oficio é um trilho; o profesional em foco cresce com nota e precio, os outros escurecem. Ficar é folhear o bairro, não um feed infinito.",
+      "palette": ["#EEEAE2", "#16140F", "#FFD000", "#FBFBF8"],
+      "materials": ["foto de trabalho real", "trilho contínuo", "borda amarela só no foco"],
+      "viewport": "Home: trilhos Plomería, Limpieza, Belleza. Mapa permanece aba. Solicitudes: trilho de estados ativos.",
+      "case": "Ganha clareza de descoberta e tempo na home; perde o sentimento de rádio/bairro se as fotos virarem pôster de streaming.",
+      "risk": "Netflix de serviços. Pertencimento morre se o foco for capa, não o oficio local.",
+      "comp": ".impeccable/mocks/decision/challenger-streaming-wall.webp",
+      "hero": "https://impeccable.style/worlds/cards/pop-culture-shelf-streaming-title-card-wall-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/pop-culture-shelf-streaming-title-card-wall.webp",
+      "wireframe": {
+        "cols": 8,
+        "rows": 14,
+        "regions": [
+          { "label": "trilho oficio A", "x": 0, "y": 0, "w": 8, "h": 4, "accent": true },
+          { "label": "trilho oficio B", "x": 0, "y": 4, "w": 8, "h": 4 },
+          { "label": "trilho oficio C", "x": 0, "y": 8, "w": 8, "h": 5 },
+          { "label": "tabs", "x": 0, "y": 13, "w": 8, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-gameboy",
+      "label": "Campo de 4 tintas",
+      "verdict": "competitive",
+      "lineage": "Game Boy: quatro tons, tiles 8x8, silhueta legível em selo",
+      "thesis": "O mapa é um campo de tiles. Liberado é sprite; ocupado é tile vazio. Quatro tintas só: papel, giz, amarelo, fuligem.",
+      "palette": ["#EEEAE2", "#FBFBF8", "#FFD000", "#16140F"],
+      "materials": ["grade de tiles", "dither no lugar de sombra", "sprite de oficio", "cursor piscando no pin"],
+      "viewport": "Aba Mapa: grade do bairro, pins como sprites. Home: janelas de tile com lista. Motion em 2-3 frames.",
+      "case": "Ganha clareza do mapa e pins minúsculos; perde identificação (nostalgia portátil, não junta vecinal).",
+      "risk": "Vira pastiche 8-bit e o ofício some atrás do pixel.",
+      "comp": ".impeccable/mocks/decision/challenger-gameboy.webp",
+      "hero": "https://impeccable.style/worlds/cards/digital-design-canon-gameboy-four-shade-field-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/digital-design-canon-gameboy-four-shade-field.webp",
+      "wireframe": {
+        "cols": 8,
+        "rows": 14,
+        "regions": [
+          { "label": "campo tiles", "x": 0, "y": 0, "w": 8, "h": 9, "accent": true },
+          { "label": "janela sprite", "x": 0, "y": 9, "w": 8, "h": 4 },
+          { "label": "tabs", "x": 0, "y": 13, "w": 8, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-cracktro",
+      "label": "Fila no vazio",
+      "verdict": "declined",
+      "lineage": "Cracktro: uma linha bitmap sobre vazio preto",
+      "palette": ["#16140F", "#EEEAE2", "#FFD000"],
+      "materials": ["vazio emissivo", "poeira de pixels", "caret amarelo"],
+      "thesis": "Solicitudes como uma linha na frente; o resto é profundidade.",
+      "viewport": "Uma linha de pedido; camadas atrás à deriva.",
+      "case": "Perde os dois eixos: ninguém se vê num cracktro às 2h, e o mapa some.",
+      "kept": "Hierarquia por força de sinal, não por caixas.",
+      "risk": "Ilegível como ferramenta do dia.",
+      "hero": "https://impeccable.style/worlds/cards/operate-c-cracktro-scroller-queue-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/operate-c-cracktro-scroller-queue.webp",
+      "comp": ".impeccable/mocks/decision/challenger-cracktro.webp"
+    },
+    {
+      "id": "challenger-rain",
+      "label": "Chuva com destino",
+      "verdict": "declined",
+      "lineage": "Jardim de gravidades: cada nuvem puxa a chuva para um lugar",
+      "palette": ["#EEEAE2", "#1F6B45", "#FFD000", "#16140F"],
+      "materials": ["campo de vetores", "gota com destino", "nuvem de oficio"],
+      "thesis": "A solicitud cai até o profesional certo.",
+      "viewport": "Matching como trajetória, não lista.",
+      "case": "Perde identificação e clareza: operate não aguenta física surreal.",
+      "kept": "Motion só quando a solicitud está a caminho de alguém.",
+      "risk": "Vira demo, some o mapa.",
+      "hero": "https://impeccable.style/worlds/cards/dream-surreal-impossible-worlds-gravity-rain-garden-hero.webp",
+      "comp": ".impeccable/mocks/decision/challenger-rain.webp"
+    },
+    {
+      "id": "challenger-dive",
+      "label": "Dois fundos",
+      "verdict": "declined",
+      "lineage": "Mergulho: superfície, termoclina, close da parede",
+      "palette": ["#1F4E8C", "#EEEAE2", "#FFD000"],
+      "materials": ["banda de profundidade", "neve marinha", "lâmpada no detalhe"],
+      "thesis": "Mapa é a superfície; a ficha é o close.",
+      "viewport": "Descer do mapa para a ficha.",
+      "case": "Perde os dois: oceano luta com o amarelo do Ñee! e com o bairro.",
+      "kept": "Mapa largo, ficha acesa. Sem misturar os dois planos.",
+      "risk": "Escurece o app contra a paleta combinada.",
+      "hero": "https://impeccable.style/worlds/cards/rivers-tides-ocean-depths-mesophotic-deep-dive-hero.webp",
+      "comp": ".impeccable/mocks/decision/challenger-dive.webp"
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "code", "toggle": true },
+  "canon": true,
+  "canonCard": {
+    "label": "Marketplace de serviços, feito direito",
+    "thesis": "Home com busca, grade de categorias, lista Cerca de ti, aba de mapa e solicitudes com pills de estado. O padrão da categoria, no amarelo do Ñee!.",
+    "palette": ["#FFD000", "#FFFFFF", "#16140F", "#F3F4F6"],
+    "materials": ["cards arredondados", "sombra leve", "foto circular", "bottom tabs"],
+    "viewport": "O recorte que o print de exemplo já descreve, executado com ofício.",
+    "risk": "Indistinguível de Rappi / Taskrabbit, só amarelo no lugar do azul.",
+    "comp": ".impeccable/mocks/decision/canon.webp"
+  },
+  "steer": true
+}

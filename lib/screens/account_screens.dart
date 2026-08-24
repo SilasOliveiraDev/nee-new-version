@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import '../widgets/nee_sheets.dart';
 import 'password_flow.dart';
+import 'tickets_screen.dart';
 
 class SecurityScreen extends StatelessWidget {
   const SecurityScreen({super.key, required this.state});
@@ -374,19 +375,20 @@ class HelpCenterScreen extends StatelessWidget {
           ),
           ListTile(
             title: const Text('Contactar soporte'),
-            onTap: () => showInformationSheet(
+            onTap: () => Navigator.push(
               context,
-              title: 'Contactar soporte',
-              body: 'Escríbenos a soporte@nee.bo y te respondemos lo antes posible.',
+              MaterialPageRoute(
+                builder: (_) => TicketsScreen(state: state),
+              ),
             ),
           ),
           ListTile(
             title: const Text('Reportar un problema'),
-            onTap: () => showInformationSheet(
+            onTap: () => Navigator.push(
               context,
-              title: 'Reportar un problema',
-              body:
-                  'Cuéntanos qué ocurrió. El sistema de tickets llegará pronto; por ahora el equipo de Ñee recibe tu reporte por correo.',
+              MaterialPageRoute(
+                builder: (_) => TicketsScreen(state: state),
+              ),
             ),
           ),
         ],

@@ -381,7 +381,8 @@ class _StatusScreenState extends State<StatusScreen> {
       body:
           'Al confirmar, ${p.name} será seleccionada para realizar tu servicio y ambos podrán coordinar los detalles desde Ñee.\n\n'
           '${p.name}\n⭐ ${p.rating} · ${p.jobs} servicios realizados\n'
-          '${p.specialty}\n📍 ${p.distanceKm.toStringAsFixed(1)} km\n'
+          '${p.specialty}\n'
+          '${p.distanceLabel == null ? '' : '📍 ${p.distanceLabel}\n'}'
           'Disponibilidad: ${offer.availability}'
           '${offer.priceBs == null ? '' : '\nPropuesta: Bs. ${offer.priceBs!.toStringAsFixed(0)}'}',
       primary: 'Confirmar profesional',
@@ -801,10 +802,11 @@ class _OfferCard extends StatelessWidget {
               p.specialty,
               style: const TextStyle(color: NeeColors.muted),
             ),
-            Text(
-              '📍 ${p.distanceKm.toStringAsFixed(1)} km de ti',
-              style: const TextStyle(color: NeeColors.muted),
-            ),
+            if (p.distanceLabel != null)
+              Text(
+                '📍 ${p.distanceLabel} de ti',
+                style: const TextStyle(color: NeeColors.muted),
+              ),
             Text(
               '✓ ${p.jobs} trabajos realizados',
               style: const TextStyle(color: NeeColors.muted),

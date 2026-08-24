@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -8,7 +10,9 @@ import '../widgets.dart';
 import '../widgets/nee_sheets.dart';
 import 'account_screens.dart';
 import 'addresses_manager.dart';
+import 'daily_challenges_card.dart';
 import 'password_flow.dart';
+import 'tickets_screen.dart';
 
 class ClientProfileScreen extends StatelessWidget {
   const ClientProfileScreen({super.key, required this.state});
@@ -46,6 +50,21 @@ class ClientProfileScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
+              _Group(
+                title: 'Desafíos',
+                children: [
+                  _Row(
+                    label: 'Desafíos del día',
+                    trailing: state.openChallengeCount == 0
+                        ? 'Hoy listo'
+                        : '${state.openChallengeCount} por hacer',
+                    onTap: () => _open(
+                      context,
+                      DailyChallengesScreen(state: state),
+                    ),
+                  ),
+                ],
+              ),
               _Group(
                 title: 'Mi cuenta',
                 children: [
@@ -93,12 +112,7 @@ class ClientProfileScreen extends StatelessWidget {
                   ),
                   _Row(
                     label: 'Contactar soporte',
-                    onTap: () => showInformationSheet(
-                      context,
-                      title: 'Soporte',
-                      body:
-                          'Escríbenos a soporte@nee.bo. Pronto tendrás tickets dentro de Ñee.',
-                    ),
+                    onTap: () => _open(context, TicketsScreen(state: state)),
                   ),
                 ],
               ),
@@ -328,6 +342,7 @@ class _ProfileDataScreenState extends State<ProfileDataScreen> {
       await AccountRepository.uploadAvatar(id, bytes);
     }
     widget.state.notifyAndSave();
+    unawaited(widget.state.completeChallenge('foto_perfil'));
     if (!mounted) return;
     await showSuccessSheet(
       context,

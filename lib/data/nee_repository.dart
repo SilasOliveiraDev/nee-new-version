@@ -7,8 +7,10 @@ import '../domain/cancellation.dart';
 import '../mock_data.dart';
 import '../models.dart';
 import '../places/place_models.dart';
+import 'hire_repository.dart';
 import 'nee_supabase.dart';
 import 'professional_mapper.dart';
+import 'professional_repository.dart';
 import 'users_row.dart';
 
 class NeeRepository {
@@ -271,31 +273,38 @@ class NeeRepository {
   static Future<void> loadFeaturedProfessionals(NeeAppState state) async {
     if (!NeeSupabase.ready) {
       state.directory = const [];
+      state.directoryError = null;
       return;
     }
+    final origin = state.user.currentLocation.hasCoords
+        ? state.user.currentLocation
+        : state.user.registeredAddress;
     try {
-      final rows = await NeeSupabase.client
-          .from('users')
-          .select(
-            'id, name, UUID, Categoria, categoriaId, Subcategoria, Zona, cidade, city, latlng, rateAvaliacao, statusDocumentos, isDestacado, isSuspenso, isBloqueado, isDeletado, zona_atendimento',
-          )
-          .eq('isDestacado', true);
-      final origin = state.user.currentLocation.hasCoords
-          ? state.user.currentLocation
-          : state.user.registeredAddress;
-      state.directory =
-          [
-              for (final row in rows)
-                professionalFromUserRow(
-                  Map<String, dynamic>.from(row),
-                  originLat: origin.latitude,
-                  originLng: origin.longitude,
-                ),
-            ].where((p) => p.isDestaque).toList()
-            ..sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
+      state.catalog = await ProfessionalRepository.loadCategories();
+      final verified = await ProfessionalRepository.loadPublic(
+        originLat: origin.latitude,
+        originLng: origin.longitude,
+        verified: true,
+        limit: 30,
+      );
+      final nearby = await ProfessionalRepository.loadPublic(
+        originLat: origin.latitude,
+        originLng: origin.longitude,
+        verified: false,
+        limit: 40,
+      );
+      final byId = <String, Professional>{};
+      for (final pro in [...verified, ...nearby]) {
+        byId[pro.id] = pro;
+      }
+      state.directory = byId.values.toList()
+        ..sort((a, b) => (a.distanceKm ?? 1e9).compareTo(b.distanceKm ?? 1e9));
+      state.directoryError = null;
+      await HireRepository.applyStatuses(state.directory);
     } catch (error) {
-      debugPrint('Ñee: falha ao ler profissionais destacados: $error');
+      debugPrint('Ñee: falha ao ler profissionais: $error');
       state.directory = const [];
+      state.directoryError = 'No se pudieron cargar los profesionales.';
     }
   }
 
@@ -501,9 +510,6 @@ class NeeRepository {
           '${Map<String, dynamic>.from(row)['professional_id'] ?? ''}',
       }..removeWhere((id) => id.isEmpty);
       await _ensureProfessionals(state, professionalIds);
-      final origin = state.user.currentLocation.hasCoords
-          ? state.user.currentLocation
-          : state.user.registeredAddress;
       final loaded = <ServiceRequest>[];
       for (final raw in requestRows) {
         final row = Map<String, dynamic>.from(raw);
@@ -516,15 +522,7 @@ class NeeRepository {
         for (final offer in offerRows) {
           final proId = '${offer['professional_id'] ?? ''}';
           var professional = _findProfessional(state, proId);
-          professional ??= professionalFromUserRow(
-            {
-              'UUID': proId,
-              'name': 'Profesional',
-              'isDestacado': true,
-            },
-            originLat: origin.latitude,
-            originLng: origin.longitude,
-          );
+          if (professional == null) continue;
           final time = '${offer['time_estimate'] ?? ''}'.trim();
           request.offers.add(
             ServiceOffer(
@@ -539,7 +537,10 @@ class NeeRepository {
         }
         loaded.add(request);
       }
-      if (loaded.isEmpty) return;
+      if (loaded.isEmpty) {
+        state.requests.removeWhere((r) => r.id.startsWith('demo'));
+        return;
+      }
       state.requests.removeWhere(
         (r) => r.id.startsWith('demo') || r.remoteId != null,
       );
@@ -556,23 +557,18 @@ class NeeRepository {
     final missing = ids.where((id) => _findProfessional(state, id) == null).toList();
     if (missing.isEmpty) return;
     try {
-      final rows = await NeeSupabase.client
-          .from('users')
-          .select(
-            'id, name, UUID, Categoria, categoriaId, Subcategoria, Zona, cidade, city, latlng, rateAvaliacao, statusDocumentos, isDestacado, isSuspenso, isBloqueado, isDeletado, zona_atendimento',
-          )
-          .inFilter('UUID', missing);
       final origin = state.user.currentLocation.hasCoords
           ? state.user.currentLocation
           : state.user.registeredAddress;
-      final extra = [
-        for (final row in rows)
-          professionalFromUserRow(
-            Map<String, dynamic>.from(row),
-            originLat: origin.latitude,
-            originLng: origin.longitude,
-          ),
-      ];
+      final extra = <Professional>[];
+      for (final id in missing) {
+        final pro = await ProfessionalRepository.getById(
+          id,
+          originLat: origin.latitude,
+          originLng: origin.longitude,
+        );
+        if (pro != null) extra.add(pro);
+      }
       state.directory = [...state.directory, ...extra];
     } catch (error) {
       debugPrint('Ñee: falha ao ler profissionais das propostas: $error');

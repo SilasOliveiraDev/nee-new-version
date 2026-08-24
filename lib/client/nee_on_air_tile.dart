@@ -62,11 +62,13 @@ class NeeOnAirTile extends StatelessWidget {
                           professional: professional,
                           compact: true,
                         ),
+                        if (professional.distanceLabel != null) ...[
                         const SizedBox(width: 10),
                         Text(
-                          '${professional.distanceKm.toStringAsFixed(1)} km',
+                          professional.distanceLabel!,
                           style: Theme.of(context).textTheme.labelSmall,
                         ),
+                        ],
                       ],
                     ),
                   ],
@@ -107,10 +109,15 @@ class NeeFeaturedAirCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ink = Theme.of(context).colorScheme.onSurface;
     return SizedBox(
-      width: 148,
+      width: 168,
       child: Material(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(NeeRadii.tile),
+        elevation: 0,
+        shadowColor: NeeColors.soot.withValues(alpha: 0.16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(NeeRadii.tile),
+          side: const BorderSide(color: NeeColors.vest, width: 1.6),
+        ),
         child: InkWell(
           onTap: onOpen,
           borderRadius: BorderRadius.circular(NeeRadii.tile),
@@ -119,21 +126,61 @@ class NeeFeaturedAirCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SignalAvatar(professional: professional, radius: 22),
+                Row(
+                  children: [
+                    _SignalAvatar(professional: professional, radius: 24),
+                    const Spacer(),
+                    const Icon(Icons.verified, color: NeeColors.vest, size: 20),
+                  ],
+                ),
                 const Spacer(),
                 Text(
                   professional.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontWeight: FontWeight.w800, color: ink),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: ink,
+                    fontSize: 15,
+                  ),
                 ),
+                const SizedBox(height: 4),
+                const NeeVerifiedBadge(),
+                const SizedBox(height: 6),
                 Text(
-                  '${professional.rating}  ${professional.distanceKm.toStringAsFixed(1)} km',
+                  [
+                    professional.ratingLabel,
+                    if (professional.distanceLabel != null)
+                      professional.distanceLabel!,
+                  ].join('  '),
                   style: Theme.of(context).textTheme.labelSmall,
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class NeeVerifiedBadge extends StatelessWidget {
+  const NeeVerifiedBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: NeeColors.vest.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(NeeRadii.pill),
+      ),
+      child: const Text(
+        '✓ Verificado',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: NeeColors.soot,
         ),
       ),
     );
@@ -149,19 +196,24 @@ class _SignalAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lit = professional.available;
+    final url = professional.avatarUrl;
+    final network = url != null && url.startsWith('http') ? url : null;
     return CircleAvatar(
       radius: radius,
       backgroundColor: lit ? NeeColors.vest : Theme.of(context).colorScheme.surface,
       foregroundColor: NeeColors.soot,
-      child: Text(
-        professional.initials,
-        style: TextStyle(
-          fontWeight: FontWeight.w800,
-          color: lit
-              ? NeeColors.soot
-              : Theme.of(context).colorScheme.onSurface,
-        ),
-      ),
+      backgroundImage: network == null ? null : NetworkImage(network),
+      child: network == null
+          ? Text(
+              professional.initials,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: lit
+                    ? NeeColors.soot
+                    : Theme.of(context).colorScheme.onSurface,
+              ),
+            )
+          : null,
     );
   }
 }

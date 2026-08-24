@@ -300,11 +300,15 @@ class ProfileAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final photo = user.photoBytes;
+    final url = user.photoUrl;
+    final network = photo == null && url != null && url.startsWith('http');
     return CircleAvatar(
       radius: radius,
       backgroundColor: NeeColors.yellow,
-      backgroundImage: photo == null ? null : MemoryImage(photo),
-      child: photo == null
+      backgroundImage: photo != null
+          ? MemoryImage(photo)
+          : (network ? NetworkImage(url) : null),
+      child: photo == null && !network
           ? Text(
               user.initials,
               style: TextStyle(

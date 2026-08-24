@@ -1,17 +1,7 @@
+import '../domain/availability.dart';
 import '../mock_data.dart';
 import '../models.dart';
 import '../places/geo_match.dart';
-
-const _categoryByDbId = <int, String>{
-  2: 'reparaciones',
-  3: 'limpieza',
-  5: 'belleza',
-  7: 'tech',
-  8: 'jardineria',
-  10: 'construccion',
-  13: 'plomeria',
-  14: 'electricidad',
-};
 
 ({double? lat, double? lng}) parseLatLng(dynamic raw) {
   if (raw == null) return (lat: null, lng: null);
@@ -31,8 +21,7 @@ String mapCategoryId({
   String? subcategoria,
 }) {
   if (categoriaId is num) {
-    final mapped = _categoryByDbId[categoriaId.toInt()];
-    if (mapped != null) return mapped;
+    return '${categoriaId.toInt()}';
   }
   final blob = '${categoria ?? ''} ${subcategoria ?? ''}'.toLowerCase();
   for (final category in categories) {
@@ -55,36 +44,54 @@ String initialsFrom(String name) {
   return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
 }
 
+bool isProviderType(String? userType) {
+  final value = (userType ?? '').trim().toLowerCase();
+  return value == 'servicio' || value == 'provider' || value == 'profesional';
+}
+
 Professional professionalFromUserRow(
   Map<String, dynamic> row, {
   double? originLat,
   double? originLng,
 }) {
-  final name = (row['name'] as String?)?.trim();
-  final displayName = (name == null || name.isEmpty) ? 'Profesional Ñee' : name;
+  final name = (row['display_name'] as String?)?.trim() ??
+      (row['display_name'] as String?)?.trim() ??
+      (row['name'] as String?)?.trim() ??
+      '';
   final coords = parseLatLng(row['latlng']);
+  final categoryName = (row['category_name'] as String?)?.trim() ??
+      (row['category_name'] as String?)?.trim() ??
+      (row['Categoria'] as String?)?.trim();
   final categoryId = mapCategoryId(
-    categoriaId: row['categoriaId'],
-    categoria: row['Categoria'] as String?,
-    subcategoria: row['Subcategoria'] as String?,
+    categoriaId: row['category_id'] ?? row['categoriaId'],
+    categoria: categoryName,
+    subcategoria: (row['specialty'] as String?) ?? (row['Subcategoria'] as String?),
   );
-  final specialty = (row['Subcategoria'] as String?)?.trim().isNotEmpty == true
-      ? row['Subcategoria'] as String
-      : ((row['Categoria'] as String?)?.trim().isNotEmpty == true
-          ? row['Categoria'] as String
-          : 'Servicio');
-  final zone = (row['Zona'] as String?)?.trim() ?? '';
-  final city = (row['cidade'] as String?)?.trim().isNotEmpty == true
-      ? row['cidade'] as String
-      : ((row['city'] as String?) ?? '');
+  final specialty = (row['specialty'] as String?)?.trim().isNotEmpty == true
+      ? row['specialty'] as String
+      : ((row['Subcategoria'] as String?)?.trim().isNotEmpty == true
+          ? row['Subcategoria'] as String
+          : (categoryName ?? ''));
+  final zone = (row['zone'] as String?)?.trim() ??
+      (row['Zona'] as String?)?.trim() ??
+      '';
+  final city = (row['city'] as String?)?.trim().isNotEmpty == true
+      ? row['city'] as String
+      : ((row['cidade'] as String?)?.trim() ?? '');
+  final serviceArea = (row['service_area'] as String?)?.trim() ??
+      (row['zona_atendimento'] as String?)?.trim() ??
+      '';
   final cityLine = [
     if (city.isNotEmpty) city,
     if (zone.isNotEmpty) zone,
   ].join(' · ');
-  final blocked = row['isBloqueado'] == true || row['isDeletado'] == true;
-  final suspended = row['isSuspenso'] == true;
-  final docs = '${row['statusDocumentos'] ?? ''}'.toUpperCase();
-  var distance = 99.0;
+  final blocked = row['is_blocked'] == true ||
+      row['isBloqueado'] == true ||
+      row['isDeletado'] == true;
+  final suspended = row['is_suspended'] == true || row['isSuspenso'] == true;
+  final docs = '${row['document_status'] ?? row['statusDocumentos'] ?? ''}'
+      .toUpperCase();
+  double? distance;
   if (originLat != null &&
       originLng != null &&
       coords.lat != null &&
@@ -96,27 +103,59 @@ Professional professionalFromUserRow(
       toLng: coords.lng!,
     );
   }
+  final reviewAvg = (row['reviews_average'] as num?)?.toDouble();
+  final stored = (row['stored_rating'] as num?)?.toDouble() ??
+      (row['rateAvaliacao'] as num?)?.toDouble() ??
+      0;
+  final ratingCount = (row['rating_count'] as num?)?.toInt() ?? 0;
+  final rating = reviewAvg ?? (stored > 0 ? stored : 0);
+  final jobs = (row['completed_jobs_count'] as num?)?.toInt() ??
+      (row['jobs'] as num?)?.toInt() ??
+      0;
+  final id = '${row['professional_id'] ?? row['professional_id'] ?? row['UUID'] ?? row['id'] ?? ''}';
+  final bio = (row['bio'] as String?)?.trim() ??
+      (row['descricaoSobre'] as String?)?.trim();
+  final avatar = (row['avatar_url'] as String?)?.trim() ??
+      (row['imagemPerfil'] as String?)?.trim();
+  if (id.isEmpty) {
+    assert(() {
+      // ignore: avoid_print
+      print('Ñee: missing professional id in user row');
+      return true;
+    }());
+  }
   return Professional(
-    id: '${row['UUID'] ?? row['id']}',
-    name: displayName,
+    id: id,
+    name: name,
     specialty: specialty,
     categoryId: categoryId,
-    city: cityLine.isEmpty ? 'Bolivia' : cityLine,
-    initials: initialsFrom(displayName),
-    rating: (row['rateAvaliacao'] as num?)?.toDouble() ?? 0,
-    jobs: 0,
+    categoryName: categoryName,
+    city: cityLine,
+    initials: initialsFrom(name),
+    rating: rating,
+    ratingCount: ratingCount,
+    jobs: jobs,
     distanceKm: distance,
     available: !blocked && !suspended,
-    isActive: !blocked,
+    isActive: !blocked && !suspended,
+    isProvider: isProviderType(
+          '${row['user_type'] ?? row['user_type'] ?? ''}',
+        ) ||
+        row['professional_id'] != null ||
+        row['professional_id'] != null,
     documentsVerified: docs == 'VERIFIED' || docs == 'PRO',
-    latitude: coords.lat ?? -17.7833,
-    longitude: coords.lng ?? -63.1821,
+    verified: row['verified'] == true,
+    latitude: coords.lat,
+    longitude: coords.lng,
     hasMapPin: coords.lat != null && coords.lng != null,
-    isDestaque: row['isDestacado'] == true,
+    isDestaque: row['is_featured'] == true || row['isDestacado'] == true,
+    avatarUrl: (avatar ?? '').isEmpty ? null : avatar,
+    bio: (bio ?? '').isEmpty ? null : bio,
+    serviceArea: serviceArea.isEmpty ? null : serviceArea,
+    acceptingRequests: !blocked && !suspended,
+    opsStatus: blocked || suspended ? ProOpsStatus.paused : ProOpsStatus.offline,
     tags: [
-      if (zone.isNotEmpty) zone,
-      if ((row['zona_atendimento'] as String?)?.trim().isNotEmpty == true)
-        row['zona_atendimento'] as String,
+      if (serviceArea.isNotEmpty) serviceArea,
     ],
   );
 }

@@ -311,11 +311,17 @@ List<Professional> professionalsReadyToHelp(
   String categoryId, {
   Iterable<Professional>? catalog,
 }) {
+  final needle = categoryId.toLowerCase();
   final list = (catalog ?? const <Professional>[])
-      .where((p) => p.isDestaque)
-      .where((p) => categoryId.isEmpty || p.categoryId == categoryId)
+      .where((p) => p.canHelpClient)
+      .where((p) {
+        if (categoryId.isEmpty) return true;
+        if (p.categoryId == categoryId) return true;
+        return (p.categoryName ?? '').toLowerCase().contains(needle) ||
+            p.specialty.toLowerCase().contains(needle);
+      })
       .toList()
-    ..sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
+    ..sort((a, b) => (a.distanceKm ?? 1e9).compareTo(b.distanceKm ?? 1e9));
   return list;
 }
 
@@ -324,4 +330,30 @@ TradeCategory? tradeById(String id) {
     if (trade.id == id) return trade;
   }
   return null;
+}
+
+IconData iconForCategoryName(String nome) {
+  final blob = nome.toLowerCase();
+  if (blob.contains('plom')) return Icons.water_drop_outlined;
+  if (blob.contains('electric')) return Icons.bolt_outlined;
+  if (blob.contains('pint')) return Icons.format_paint_outlined;
+  if (blob.contains('limp')) return Icons.cleaning_services_outlined;
+  if (blob.contains('belleza') || blob.contains('barber')) {
+    return Icons.spa_outlined;
+  }
+  if (blob.contains('jard')) return Icons.yard_outlined;
+  if (blob.contains('construc') || blob.contains('albañ')) {
+    return Icons.apartment_outlined;
+  }
+  if (blob.contains('tecno') || blob.contains('comput')) {
+    return Icons.laptop_mac_outlined;
+  }
+  if (blob.contains('cerraj')) return Icons.lock_open_outlined;
+  if (blob.contains('refriger') || blob.contains('aire')) {
+    return Icons.ac_unit_outlined;
+  }
+  if (blob.contains('mecán') || blob.contains('mecan') || blob.contains('vehíc')) {
+    return Icons.directions_car_outlined;
+  }
+  return Icons.handyman_outlined;
 }

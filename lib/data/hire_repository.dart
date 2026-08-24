@@ -61,8 +61,9 @@ class HireRepository {
   static Future<AvailabilityView> statusFor(String professionalId) async {
     if (!NeeSupabase.ready) {
       return const AvailabilityView(
-        status: ProOpsStatus.available,
-        acceptingRequests: true,
+        status: ProOpsStatus.offline,
+        acceptingRequests: false,
+        labelCode: 'UNKNOWN',
       );
     }
     try {
@@ -77,8 +78,9 @@ class HireRepository {
       debugPrint('Ñee: falha ao ler status público: $error');
     }
     return const AvailabilityView(
-      status: ProOpsStatus.available,
-      acceptingRequests: true,
+      status: ProOpsStatus.offline,
+      acceptingRequests: false,
+      labelCode: 'UNKNOWN',
     );
   }
 

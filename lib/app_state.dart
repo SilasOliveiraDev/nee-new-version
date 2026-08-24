@@ -6,7 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data/account_repository.dart';
 import 'data/chat_repository.dart';
+import 'data/engagement_repository.dart';
 import 'data/hire_repository.dart';
+import 'data/inbox_repository.dart';
 import 'data/nee_repository.dart';
 import 'data/nee_supabase.dart';
 import 'data/professional_mapper.dart';
@@ -15,6 +17,8 @@ import 'domain/account.dart';
 import 'domain/availability.dart';
 import 'domain/cancellation.dart';
 import 'domain/chat.dart';
+import 'domain/engagement.dart';
+import 'domain/inbox.dart';
 import 'domain/request_lifecycle.dart';
 import 'mock_data.dart';
 import 'models.dart';
@@ -43,6 +47,21 @@ class NeeAppState extends ChangeNotifier {
   var solicitudesHistory = false;
   NotificationPrefs notifPrefs = NotificationPrefs();
   String languageCode = 'es';
+  List<DailyChallenge> todayChallenges = List.of(fallbackChallenges);
+  List<InboxNotice> inbox = [];
+  var inboxLoading = false;
+  var inboxHasMore = true;
+  NoticeFilter inboxFilter = NoticeFilter.all;
+  int _unreadInboxCount = 0;
+  var _inboxPaging = false;
+
+  int get openChallengeCount =>
+      todayChallenges.where((c) => !c.done).length;
+
+  bool get allChallengesDoneToday =>
+      todayChallenges.isNotEmpty && openChallengeCount == 0;
+
+  int get unreadInboxCount => _unreadInboxCount;
 
   bool get blocksNewSolicitud => createBlock?.isActive ?? false;
 
@@ -123,8 +142,167 @@ class NeeAppState extends ChangeNotifier {
     if (customerId != 'local-customer') {
       notifPrefs = await AccountRepository.loadPrefs(customerId);
     }
+    await refreshChallenges();
+    await refreshInbox();
+    InboxRepository.subscribe(
+      userId: customerId,
+      onInsert: ingestInboxNotice,
+      onUpdate: ingestInboxUpdate,
+    );
     persist();
     notifyListeners();
+  }
+
+  Future<void> refreshChallenges() async {
+    todayChallenges = await EngagementRepository.loadChallenges(customerId);
+    await _autoCompleteChallenges();
+    notifyListeners();
+  }
+
+  Future<void> completeChallenge(String slug) async {
+    final current = todayChallenges.where((c) => c.slug == slug);
+    if (current.isNotEmpty && current.first.done) return;
+    final ok = await EngagementRepository.completeChallenge(
+      userId: customerId,
+      slug: slug,
+    );
+    if (!ok) return;
+    todayChallenges = [
+      for (final item in todayChallenges)
+        item.slug == slug ? item.copyWith(done: true) : item,
+    ];
+    notifyListeners();
+  }
+
+  Future<void> _autoCompleteChallenges() async {
+    if (user.photoBytes != null || (user.photoUrl ?? '').isNotEmpty) {
+      await completeChallenge('foto_perfil');
+    }
+    final hasPlace = places.any(
+      (p) => p.street.isNotEmpty || p.formattedAddress.isNotEmpty,
+    );
+    if (hasPlace || user.registeredAddress.isFilled) {
+      await completeChallenge('direccion_casa');
+    }
+    if (requests.isNotEmpty) {
+      await completeChallenge('primera_solicitud');
+    }
+  }
+
+  Future<void> refreshInbox({NoticeFilter? filter, bool silent = false}) async {
+    if (filter != null) inboxFilter = filter;
+    final showSkeleton = !silent && inbox.isEmpty;
+    if (showSkeleton) {
+      inboxLoading = true;
+      notifyListeners();
+    }
+    final page = await InboxRepository.loadPage(
+      customerId,
+      offset: 0,
+      filter: inboxFilter,
+    );
+    inbox = page.items;
+    inboxHasMore = page.hasMore;
+    inboxLoading = false;
+    _unreadInboxCount = await InboxRepository.countUnread(customerId);
+    notifyListeners();
+  }
+
+  Future<void> loadMoreInbox() async {
+    if (!inboxHasMore || _inboxPaging || inboxLoading) return;
+    _inboxPaging = true;
+    final offset = inbox.where((n) => n.source == 'notifications').length;
+    final page = await InboxRepository.loadPage(
+      customerId,
+      offset: offset,
+      filter: inboxFilter,
+    );
+    final seen = inbox.map((n) => n.id).toSet();
+    inbox = [
+      ...inbox,
+      ...page.items.where((n) => !seen.contains(n.id)),
+    ];
+    inboxHasMore = page.hasMore;
+    _inboxPaging = false;
+    notifyListeners();
+  }
+
+  void ingestInboxNotice(InboxNotice notice) {
+    if (inbox.any((item) => item.id == notice.id)) return;
+    if (inboxFilter.matches(notice)) {
+      inbox = [notice, ...inbox];
+    }
+    if (!notice.read) _unreadInboxCount += 1;
+    notifyListeners();
+  }
+
+  void ingestInboxUpdate(InboxNotice notice) {
+    final index = inbox.indexWhere((item) => item.id == notice.id);
+    if (index >= 0) inbox[index] = notice;
+    notifyListeners();
+  }
+
+  Future<void> markNoticeRead(InboxNotice notice) async {
+    if (notice.read) return;
+    notice.read = true;
+    notice.readAt = DateTime.now();
+    if (_unreadInboxCount > 0) _unreadInboxCount -= 1;
+    notifyListeners();
+    await InboxRepository.markRead(notice);
+  }
+
+  Future<void> markAllNoticesRead() async {
+    for (final notice in inbox) {
+      notice.read = true;
+      notice.readAt ??= DateTime.now();
+    }
+    _unreadInboxCount = 0;
+    notifyListeners();
+    await InboxRepository.markAllRead(customerId);
+  }
+
+  ServiceRequest? requestByRelatedId(String? relatedId) {
+    if (relatedId == null || relatedId.isEmpty) return null;
+    for (final request in requests) {
+      if (request.id == relatedId || '${request.remoteId}' == relatedId) {
+        return request;
+      }
+    }
+    return null;
+  }
+
+  Future<void> refreshClientRequests() => NeeRepository.loadClientRequests(this);
+
+  Future<void> refreshConversation(String id) async {
+    final remote = await ChatRepository.fetchConversation(id);
+    if (remote == null) return;
+    _enrich(remote);
+    final index = threads.indexWhere((t) => t.id == id);
+    if (index >= 0) {
+      remote.unread = threads[index].unread;
+      remote.professionalName = threads[index].professionalName.isNotEmpty
+          ? threads[index].professionalName
+          : remote.professionalName;
+      remote.requestTitle = threads[index].requestTitle.isNotEmpty
+          ? threads[index].requestTitle
+          : remote.requestTitle;
+      threads[index] = remote;
+    } else {
+      threads.insert(0, remote);
+    }
+    notifyListeners();
+  }
+
+  Future<ServiceConversation?> ensureConversation(String id) async {
+    for (final thread in threads) {
+      if (thread.id == id || thread.requestId == id) return thread;
+    }
+    final remote = await ChatRepository.fetchConversation(id);
+    if (remote == null) return null;
+    _enrich(remote);
+    threads.insert(0, remote);
+    notifyListeners();
+    return remote;
   }
 
   Future<void> persist() async {
@@ -149,6 +327,7 @@ class NeeAppState extends ChangeNotifier {
     places.add(place);
     persist();
     unawaited(NeeRepository.upsertAddress(this, place));
+    unawaited(completeChallenge('direccion_casa'));
     notifyListeners();
   }
 
@@ -212,8 +391,17 @@ class NeeAppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  List<ServiceCategory> catalog = List.of(categories);
+  String? directoryError;
+
   List<Professional> get highlightedProfessionals =>
-      directory.where((p) => p.isDestaque).toList();
+      directory.where((p) => p.isActive && p.isProvider).toList();
+
+  Future<void> refreshDirectory() async {
+    await NeeRepository.loadFeaturedProfessionals(this);
+    await HireRepository.applyStatuses(directory);
+    notifyListeners();
+  }
 
   List<Professional> readyToHelp(String categoryId) {
     return professionalsReadyToHelp(categoryId, catalog: directory);
@@ -254,9 +442,7 @@ class NeeAppState extends ChangeNotifier {
   }
 
   void _forceClient() {
-    user.roles
-      ..clear()
-      ..add(AppRole.customer);
+    user.roles.add(AppRole.customer);
     activeRole = AppRole.customer;
     final skipToPrefs =
         step == OnboardingStep.role ||
@@ -268,6 +454,7 @@ class NeeAppState extends ChangeNotifier {
   }
 
   void seedDemoSolicitudes() {
+    if (NeeSupabase.ready) return;
     if (requests.isNotEmpty) return;
     final plomeria = categories.firstWhere((c) => c.id == 'plomeria');
     final tech = categories.firstWhere((c) => c.id == 'tech');
@@ -317,7 +504,15 @@ class NeeAppState extends ChangeNotifier {
       ..phone = row['phone'] as String? ?? user.phone
       ..sexo = row['sexo'] as String? ?? user.sexo
       ..phoneVerified = row['verified'] as bool? ?? user.phoneVerified
-      ..supabaseUuid = row['UUID'] as String? ?? user.supabaseUuid;
+      ..supabaseUuid = row['UUID'] as String? ?? user.supabaseUuid
+      ..photoUrl = (row['imagemPerfil'] as String?)?.trim().isNotEmpty == true
+          ? row['imagemPerfil'] as String
+          : user.photoUrl;
+    final type = '${row['user_type'] ?? ''}';
+    user.roles.add(AppRole.customer);
+    if (isProviderType(type) || type.toLowerCase() == 'admin') {
+      user.roles.add(AppRole.provider);
+    }
     final id = row['id'];
     if (id is int) user.supabaseRowId = id;
     if (id is num) user.supabaseRowId = id.toInt();
@@ -367,23 +562,11 @@ class NeeAppState extends ChangeNotifier {
   }
 
   void finishLogin() {
-    if (user.firstName.trim().isEmpty) {
-      user.firstName = 'Alex';
-      user.lastName = 'Quispe';
-    }
-    if (user.registeredAddress.city.isEmpty &&
-        user.currentLocation.city.isEmpty) {
-      user.currentLocation
-        ..city = 'Santa Cruz'
-        ..country = 'Bolivia';
-    }
     finishCustomer();
   }
 
   void finishCustomer() {
-    user.roles
-      ..clear()
-      ..add(AppRole.customer);
+    user.roles.add(AppRole.customer);
     activeRole = AppRole.customer;
     step = OnboardingStep.done;
     seedDemoSolicitudes();
@@ -763,6 +946,7 @@ class NeeAppState extends ChangeNotifier {
     );
     requests.insert(0, request);
     notifyListeners();
+    unawaited(completeChallenge('primera_solicitud'));
     unawaited(_persistNewRequest(request));
     return request;
   }

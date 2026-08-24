@@ -97,20 +97,27 @@ class Professional {
     required this.categoryId,
     required this.city,
     required this.initials,
-    required this.rating,
-    required this.jobs,
-    this.distanceKm = 1.8,
+    this.rating = 0,
+    this.ratingCount = 0,
+    this.jobs = 0,
+    this.distanceKm,
     this.available = true,
     this.isActive = true,
     this.documentsVerified = false,
-    this.latitude = -17.7833,
-    this.longitude = -63.1821,
-    this.hasMapPin = true,
+    this.verified = false,
+    this.latitude,
+    this.longitude,
+    this.hasMapPin = false,
     this.isDestaque = false,
+    this.isProvider = true,
     this.tags = const [],
-    this.opsStatus = ProOpsStatus.available,
+    this.opsStatus = ProOpsStatus.offline,
     this.nextAvailableAt,
     this.acceptingRequests = true,
+    this.avatarUrl,
+    this.bio,
+    this.categoryName,
+    this.serviceArea,
   });
 
   final String id;
@@ -120,19 +127,48 @@ class Professional {
   final String city;
   final String initials;
   final double rating;
+  final int ratingCount;
   final int jobs;
-  final double distanceKm;
+  final double? distanceKm;
   final bool available;
   final bool isActive;
   final bool documentsVerified;
-  final double latitude;
-  final double longitude;
+  final bool verified;
+  final double? latitude;
+  final double? longitude;
   final bool hasMapPin;
   final bool isDestaque;
+  final bool isProvider;
   final List<String> tags;
   final ProOpsStatus opsStatus;
   final DateTime? nextAvailableAt;
   final bool acceptingRequests;
+  final String? avatarUrl;
+  final String? bio;
+  final String? categoryName;
+  final String? serviceArea;
+
+  bool get isNewProfessional => ratingCount == 0 && rating <= 0;
+
+  String get ratingLabel {
+    if (isNewProfessional) return 'Nuevo profesional';
+    final avg = rating.toStringAsFixed(1);
+    if (ratingCount <= 0) return '⭐ $avg';
+    return '⭐ $avg · $ratingCount';
+  }
+
+  String get jobsLabel {
+    if (jobs <= 0) return 'Nuevo en Ñee';
+    return '$jobs trabajos realizados';
+  }
+
+  String? get distanceLabel {
+    final km = distanceKm;
+    if (km == null) return null;
+    if (km < 1) return '< 1 km';
+    if (km < 10) return '${km.toStringAsFixed(1)} km';
+    return '${km.round()} km';
+  }
 
   AvailabilityView get availability => AvailabilityView(
         status: opsStatus,
@@ -154,28 +190,35 @@ class Professional {
       city: city,
       initials: initials,
       rating: rating,
+      ratingCount: ratingCount,
       jobs: jobs,
       distanceKm: distanceKm,
       available: view.availableNow,
       isActive: isActive,
       documentsVerified: documentsVerified,
+      verified: verified,
       latitude: latitude,
       longitude: longitude,
       hasMapPin: hasMapPin,
       isDestaque: isDestaque,
+      isProvider: isProvider,
       tags: tags,
       opsStatus: view.status,
       nextAvailableAt: view.nextAvailableAt,
       acceptingRequests: view.acceptingRequests,
+      avatarUrl: avatarUrl,
+      bio: bio,
+      categoryName: categoryName,
+      serviceArea: serviceArea,
     );
   }
 
   /// Destacados e ativos continuam visíveis mesmo ocupados.
-  bool get canHelpClient => isDestaque && isActive;
+  bool get canHelpClient => isProvider && isActive;
 
   /// Closer on-air talent reads louder. Occupied talent stays a ghost.
   double get signal {
-    final reach = (1.0 - (distanceKm / 8.0)).clamp(0.28, 1.0);
+    final reach = (1.0 - ((distanceKm ?? 8.0) / 8.0)).clamp(0.28, 1.0);
     return available ? reach : reach * 0.32;
   }
 }

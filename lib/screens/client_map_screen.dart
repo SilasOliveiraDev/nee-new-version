@@ -30,7 +30,10 @@ class _ClientMapScreenState extends State<ClientMapScreen>
   bool get wantKeepAlive => true;
 
   List<Professional> get _pins {
-    var list = onAirNearby(widget.state.highlightedProfessionals)
+    var list = onAirNearby(
+      widget.state.highlightedProfessionals,
+      includeVerified: true,
+    )
         .where((p) => p.hasMapPin)
         .toList();
     if (categoryId != null) {
@@ -75,7 +78,7 @@ class _ClientMapScreenState extends State<ClientMapScreen>
                     markers: [
                       for (final pro in pins)
                         Marker(
-                          point: LatLng(pro.latitude, pro.longitude),
+                          point: LatLng(pro.latitude!, pro.longitude!),
                           width: 28 + (pro.signal * 22),
                           height: 28 + (pro.signal * 22),
                           child: GestureDetector(
@@ -186,9 +189,13 @@ class _ClientMapScreenState extends State<ClientMapScreen>
   }
 
   Future<void> _tune(Professional pro) {
-    final category = categories.firstWhere(
-      (c) => c.id == pro.categoryId,
-      orElse: () => categories.first,
+    final category = widget.state.catalog.firstWhere(
+      (c) =>
+          c.id == pro.categoryId ||
+          c.name.toLowerCase() == (pro.categoryName ?? '').toLowerCase(),
+      orElse: () => widget.state.catalog.isNotEmpty
+          ? widget.state.catalog.first
+          : categories.first,
     );
     return openBuscarServicio(context, state: widget.state, category: category);
   }

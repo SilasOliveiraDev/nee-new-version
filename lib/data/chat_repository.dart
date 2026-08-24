@@ -75,6 +75,31 @@ class ChatRepository {
     }
   }
 
+  static Future<ServiceConversation?> fetchConversation(String id) async {
+    if (!NeeSupabase.ready || id.startsWith('local-')) return null;
+    try {
+      final byId = await NeeSupabase.client
+          .from('service_conversations')
+          .select()
+          .eq('id', id)
+          .maybeSingle();
+      if (byId != null) {
+        return conversationFromRow(Map<String, dynamic>.from(byId));
+      }
+      final byRequest = await NeeSupabase.client
+          .from('service_conversations')
+          .select()
+          .eq('request_id', id)
+          .order('updated_at', ascending: false)
+          .limit(1);
+      if (byRequest.isEmpty) return null;
+      return conversationFromRow(Map<String, dynamic>.from(byRequest.first));
+    } catch (error) {
+      debugPrint('Ñee: falha ao leer conversación: $error');
+      return null;
+    }
+  }
+
   static Future<List<ChatMessage>> fetchMessages(String conversationId) async {
     if (!NeeSupabase.ready || conversationId.startsWith('local-')) return [];
     try {

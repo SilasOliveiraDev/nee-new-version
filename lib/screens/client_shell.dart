@@ -13,10 +13,10 @@ import '../models.dart';
 import '../domain/request_lifecycle.dart';
 import '../theme.dart';
 import '../widgets.dart';
-import 'account_screens.dart';
 import 'buscar_servicio_flow.dart';
 import 'chat_thread_screen.dart';
 import 'client_map_screen.dart';
+import 'inbox_screen.dart';
 import 'professional_profile_screen.dart';
 import 'profile_hub.dart';
 import 'status_screen.dart';
@@ -98,17 +98,15 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     final user = widget.state.user;
     final q = query.trim().toLowerCase();
     var nearby = onAirNearby(widget.state.highlightedProfessionals);
+    var featured = featuredOnAir(widget.state.highlightedProfessionals);
     if (q.isNotEmpty) {
-      nearby = nearby
-          .where(
-            (p) =>
-                p.name.toLowerCase().contains(q) ||
-                p.specialty.toLowerCase().contains(q) ||
-                p.tags.any((t) => t.toLowerCase().contains(q)),
-          )
-          .toList();
+      bool matches(Professional p) =>
+          p.name.toLowerCase().contains(q) ||
+          p.specialty.toLowerCase().contains(q) ||
+          p.tags.any((t) => t.toLowerCase().contains(q));
+      nearby = nearby.where(matches).toList();
+      featured = featured.where(matches).toList();
     }
-    final featured = featuredOnAir(widget.state.highlightedProfessionals);
     final ink = Theme.of(context).colorScheme.onSurface;
 
     return Scaffold(
@@ -140,11 +138,20 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => NotificationsScreen(state: widget.state),
+                        builder: (_) => InboxScreen(state: widget.state),
                       ),
                     );
                   },
-                  icon: Icon(Icons.notifications_none_rounded, color: ink),
+                  icon: Badge(
+                    isLabelVisible: widget.state.unreadInboxCount > 0,
+                    label: Text(
+                      widget.state.unreadInboxCount > 9
+                          ? '9+'
+                          : '${widget.state.unreadInboxCount}',
+                    ),
+                    backgroundColor: NeeColors.waiting,
+                    child: Icon(Icons.notifications_none_rounded, color: ink),
+                  ),
                 ),
                 GestureDetector(
                   onTap: () => widget.state.goClientTab(3),
@@ -155,7 +162,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
             ),
           ),
           Expanded(
-            child: ListView(
+            child: RefreshIndicator(
+              color: NeeColors.vest,
+              onRefresh: widget.state.refreshDirectory,
+              child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
               children: [
                 TextField(
@@ -172,10 +182,11 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                 ),
                 const SizedBox(height: 22),
                 NeeCategoryStrip(
-                  categories: categories,
+                  categories: widget.state.catalog,
                   onTap: (category) => _openRequest(context, category),
                 ),
                 const SizedBox(height: 8),
+                if (nearby.isNotEmpty) ...[
                 Text(
                   'Cerca de ti',
                   style: Theme.of(context).textTheme.titleLarge,
@@ -194,9 +205,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                if (nearby.isEmpty)
+                if (widget.state.directoryError != null)
                   Text(
-                    'Aún no hay profesionales destacados en Ñee cerca de ti.',
+                    widget.state.directoryError!,
                     style: TextStyle(color: ink.withValues(alpha: 0.62)),
                   ),
                 for (final pro in nearby.take(4)) ...[
@@ -205,22 +216,34 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                     onOpen: () => _openPro(context, pro),
                     onQuote: () => _openRequest(
                       context,
-                      categories.firstWhere(
-                        (c) => c.id == pro.categoryId,
-                        orElse: () => categories.first,
+                      widget.state.catalog.firstWhere(
+                        (c) =>
+                            c.id == pro.categoryId ||
+                            c.name.toLowerCase() ==
+                                (pro.categoryName ?? '').toLowerCase(),
+                        orElse: () => widget.state.catalog.isNotEmpty
+                            ? widget.state.catalog.first
+                            : categories.first,
                       ),
                     ),
                   ),
                   const SizedBox(height: 10),
                 ],
                 const SizedBox(height: 10),
+                ],
+                if (widget.state.directoryError != null && nearby.isEmpty)
+                  Text(
+                    widget.state.directoryError!,
+                    style: TextStyle(color: ink.withValues(alpha: 0.62)),
+                  ),
+                if (featured.isNotEmpty) ...[
                 Text(
                   'Profesionales destacados',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
-                  height: 168,
+                  height: 196,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: featured.length,
@@ -235,11 +258,13 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
+                ],
                 FilledButton(
                   onPressed: () => _openRequest(context, null),
                   child: const Text('Buscar servicio'),
                 ),
               ],
+            ),
             ),
           ),
         ],
@@ -252,6 +277,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   }
 
   void _openPro(BuildContext context, Professional pro) {
+    widget.state.completeChallenge('ver_profesional');
     Navigator.of(context).push(
       NeeTunePage(
         child: ProfessionalProfileScreen(

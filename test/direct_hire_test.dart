@@ -87,4 +87,50 @@ void main() {
     expect(pro.canHelpClient, isTrue);
     expect(pro.availability.primaryLabel, contains('17:30'));
   });
+
+  test('direct hire copy stays with the chosen professional', () {
+    final request = ServiceRequest(
+      id: 'r-direct',
+      category: const ServiceCategory(
+        id: 'plomeria',
+        name: 'Plomería',
+        icon: Icons.plumbing_outlined,
+        hint: '',
+      ),
+      description: 'Fuga de agua',
+      location: 'Urubó',
+      createdAt: DateTime(2026, 8, 24),
+      kind: RequestKind.direct,
+      directStatus: DirectStatus.pending,
+      professional: Professional(
+        id: 'jhonni',
+        name: 'Jhonni',
+        specialty: 'Fugas',
+        categoryId: 'plomeria',
+        city: 'Santa Cruz',
+        initials: 'JH',
+        rating: 5,
+        jobs: 12,
+        verified: true,
+      ),
+    );
+    expect(request.isDirect, isTrue);
+    expect(request.stageLabel, 'Esperando respuesta');
+    expect(request.status, isNot(RequestStatus.professionalFound));
+  });
+
+  test('busy availability hides asap window', () {
+    const free = AvailabilityView(
+      status: ProOpsStatus.available,
+      acceptingRequests: true,
+    );
+    final busy = AvailabilityView(
+      status: ProOpsStatus.busy,
+      acceptingRequests: true,
+      nextAvailableAt: DateTime(2026, 8, 24, 16, 30),
+    );
+    expect(free.availableNow, isTrue);
+    expect(busy.availableNow, isFalse);
+    expect(busy.primaryLabel, contains('16:30'));
+  });
 }

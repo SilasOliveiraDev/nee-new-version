@@ -9,7 +9,7 @@ import '../client/nee_on_air_tile.dart';
 import '../mock_data.dart';
 import '../models.dart';
 import '../theme.dart';
-import 'buscar_servicio_flow.dart';
+import 'direct_hire_flow.dart';
 import 'professional_profile_screen.dart';
 
 class ClientMapScreen extends StatefulWidget {
@@ -189,15 +189,11 @@ class _ClientMapScreenState extends State<ClientMapScreen>
   }
 
   Future<void> _tune(Professional pro) {
-    final category = widget.state.catalog.firstWhere(
-      (c) =>
-          c.id == pro.categoryId ||
-          c.name.toLowerCase() == (pro.categoryName ?? '').toLowerCase(),
-      orElse: () => widget.state.catalog.isNotEmpty
-          ? widget.state.catalog.first
-          : categories.first,
+    return startDirectHire(
+      context,
+      state: widget.state,
+      professional: pro,
     );
-    return openBuscarServicio(context, state: widget.state, category: category);
   }
 }
 

@@ -118,6 +118,7 @@ class Professional {
     this.bio,
     this.categoryName,
     this.serviceArea,
+    this.phoneMasked,
   });
 
   final String id;
@@ -147,6 +148,7 @@ class Professional {
   final String? bio;
   final String? categoryName;
   final String? serviceArea;
+  final String? phoneMasked;
 
   bool get isNewProfessional => ratingCount == 0 && rating <= 0;
 
@@ -160,6 +162,19 @@ class Professional {
   String get jobsLabel {
     if (jobs <= 0) return 'Nuevo en Ñee';
     return '$jobs trabajos realizados';
+  }
+
+  String get categoryLabel {
+    final named = (categoryName ?? '').trim();
+    if (named.isNotEmpty) return named;
+    return specialty.trim();
+  }
+
+  String? get specialtyIfDifferent {
+    final spec = specialty.trim();
+    final cat = categoryLabel;
+    if (spec.isEmpty || spec.toLowerCase() == cat.toLowerCase()) return null;
+    return spec;
   }
 
   String? get distanceLabel {
@@ -210,6 +225,7 @@ class Professional {
       bio: bio,
       categoryName: categoryName,
       serviceArea: serviceArea,
+      phoneMasked: phoneMasked,
     );
   }
 

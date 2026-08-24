@@ -14,8 +14,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const NeeApp());
     await tester.pump();
+    expect(find.text('El oficio que necesitas, cerca de ti.'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pump(const Duration(milliseconds: 2100));
 
     expect(
       find.textContaining('Alguien cerca'),

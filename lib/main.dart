@@ -54,7 +54,7 @@ class _NeeAppState extends State<NeeApp> {
           if (!state.hydrated) {
             return const Scaffold(
               backgroundColor: NeeColors.paper,
-              body: Center(child: NeeLogo(height: 148, lockup: true)),
+              body: Center(child: NeeSplashMark()),
             );
           }
           if (state.needsOnboarding) {

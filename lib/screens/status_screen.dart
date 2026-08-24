@@ -9,6 +9,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import '../widgets/nee_sheets.dart';
 import 'chat_thread_screen.dart';
+import 'direct_hire_flow.dart';
 import 'professional_profile_screen.dart';
 
 class StatusScreen extends StatefulWidget {
@@ -53,9 +54,18 @@ class _StatusScreenState extends State<StatusScreen> {
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
             children: [
               Text(
-                request.category.name,
+                _headline(),
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
+              if (request.isDirect &&
+                  request.category.name.isNotEmpty &&
+                  _headline() != request.category.name) ...[
+                const SizedBox(height: 4),
+                Text(
+                  request.category.name,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ],
               if (request.specialty.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
@@ -134,18 +144,39 @@ class _StatusScreenState extends State<StatusScreen> {
                 child: StatusTimeline(current: status),
               ),
               const SizedBox(height: 24),
-              if (!RequestLifecycle.isClosed(status) ||
-                  status == RequestStatus.awaitingRating ||
-                  (status == RequestStatus.completed && !request.rated))
+              if (request.directStatus != DirectStatus.pending &&
+                  (!RequestLifecycle.isClosed(status) ||
+                      status == RequestStatus.awaitingRating ||
+                      (status == RequestStatus.completed && !request.rated)))
                 FilledButton(
                   onPressed: () => _primary(context),
-                  child: Text(
-                    request.directStatus == DirectStatus.pendingConfirmation
-                        ? 'Confirmar servicio'
-                        : RequestLifecycle.primaryCta(status),
-                  ),
+                  child: Text(_primaryCtaLabel(status)),
                 ),
               ..._secondaryActions(context, status),
+              if (request.directStatus == DirectStatus.declined ||
+                  request.directStatus == DirectStatus.expired) ...[
+                const SizedBox(height: 8),
+                Text(
+                  request.directStatus == DirectStatus.expired
+                      ? '${request.professional?.firstName ?? 'El profesional'} no respondió a tiempo.'
+                      : '${request.professional?.firstName ?? 'El profesional'} no puede atender esta solicitud.',
+                  style: const TextStyle(height: 1.35),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Podemos ayudarte a encontrar otro profesional.',
+                  style: TextStyle(color: NeeColors.muted),
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () => DirectHireDeclinedActions.findAnother(
+                    context,
+                    state: state,
+                    request: request,
+                  ),
+                  child: const Text('Buscar otro profesional'),
+                ),
+              ],
               if (RequestLifecycle.canCancelStatus(status))
                 TextButton(
                   onPressed: () => _cancel(context),
@@ -190,19 +221,50 @@ class _StatusScreenState extends State<StatusScreen> {
     }
   }
 
+  String _headline() {
+    final first = request.professional?.firstName ?? 'El profesional';
+    if (request.isDirect) {
+      switch (request.directStatus) {
+        case DirectStatus.pending:
+          return 'Solicitud enviada ✓';
+        case DirectStatus.negotiation:
+          return '$first aceptó tu solicitud 🎉';
+        case DirectStatus.pendingConfirmation:
+          return 'Confirmar servicio';
+        case DirectStatus.expired:
+          return '$first no respondió a tiempo';
+        case DirectStatus.declined:
+          return '$first no puede atender esta solicitud';
+        default:
+          break;
+      }
+    }
+    return request.category.name;
+  }
+
+  String _primaryCtaLabel(RequestStatus status) {
+    if (request.directStatus == DirectStatus.pendingConfirmation) {
+      return 'Confirmar servicio';
+    }
+    if (request.isDirect && request.directStatus == DirectStatus.negotiation) {
+      return 'Abrir chat';
+    }
+    return RequestLifecycle.primaryCta(status);
+  }
+
   String _lead(RequestStatus status) {
     if (request.isDirect) {
       switch (request.directStatus) {
         case DirectStatus.pending:
-          return '${request.professional?.firstName ?? 'El profesional'} recibió tu solicitud. Te avisaremos cuando responda.';
+          return '${request.professional?.firstName ?? 'El profesional'} recibió tu solicitud. Estamos esperando su respuesta. Te avisaremos cuando responda.';
         case DirectStatus.negotiation:
-          return 'Ahora pueden coordinar los detalles del servicio.';
+          return 'Ahora pueden conversar para coordinar los últimos detalles.';
         case DirectStatus.pendingConfirmation:
           return '${request.professional?.firstName ?? 'El profesional'} está listo para confirmar.';
         case DirectStatus.expired:
-          return 'No respondió a tiempo. Puedes buscar otro profesional.';
+          return 'Podemos ayudarte a encontrar otro profesional.';
         case DirectStatus.declined:
-          return 'No puede atender esta solicitud.';
+          return 'Podemos ayudarte a encontrar otro profesional.';
         default:
           break;
       }

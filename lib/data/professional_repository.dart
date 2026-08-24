@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../domain/phone_mask.dart';
 import '../mock_data.dart';
 import '../models.dart';
 import 'nee_supabase.dart';
@@ -48,6 +49,7 @@ class ProfessionalRepository {
       'professional_id, display_name, avatar_url, user_type, category_name, category_id, specialty, bio, zone, city, service_area, latlng, reviews_average, stored_rating, rating_count, completed_jobs_count, is_featured, is_suspended, is_blocked, document_status';
 
   static const _columnsWithVerified = '$_baseColumns, verified';
+  static const _profileColumns = '$_columnsWithVerified, phone_masked';
 
   static Future<List<Professional>> loadPublic({
     double? originLat,
@@ -109,7 +111,10 @@ class ProfessionalRepository {
         int.tryParse(categoryId) != null) {
       query = query.eq('category_id', int.parse(categoryId));
     }
-    final rows = await query.limit(limit);
+    final rows = await (columns.contains('verified')
+            ? query.order('verified', ascending: false)
+            : query)
+        .limit(limit);
     final list = [
       for (final row in rows)
         professionalFromUserRow(
@@ -118,9 +123,9 @@ class ProfessionalRepository {
           originLng: originLng,
         ),
     ]..sort((a, b) {
-        final da = a.distanceKm ?? 1e9;
-        final db = b.distanceKm ?? 1e9;
-        return da.compareTo(db);
+        final verifiedCmp = (b.verified ? 1 : 0).compareTo(a.verified ? 1 : 0);
+        if (verifiedCmp != 0) return verifiedCmp;
+        return (a.distanceKm ?? 1e9).compareTo(b.distanceKm ?? 1e9);
       });
     return list.where((p) => p.id.isNotEmpty && p.isActive).toList();
   }
@@ -136,14 +141,15 @@ class ProfessionalRepository {
       try {
         row = await NeeSupabase.client
             .from('professional_public_profiles')
-            .select(_columnsWithVerified)
+            .select(_profileColumns)
             .eq('professional_id', professionalId)
             .maybeSingle();
       } catch (error) {
-        if ('$error'.contains('verified')) {
+        final text = '$error';
+        if (text.contains('phone_masked') || text.contains('verified')) {
           row = await NeeSupabase.client
               .from('professional_public_profiles')
-              .select(_baseColumns)
+              .select(_columnsWithVerified)
               .eq('professional_id', professionalId)
               .maybeSingle();
         } else {
@@ -244,6 +250,22 @@ class ProfessionalRepository {
       portfolio: portfolio,
       reviews: reviews,
     );
+  }
+
+  static Future<String?> whatsappNumber(String professionalId) async {
+    if (!NeeSupabase.ready || professionalId.isEmpty) return null;
+    try {
+      final raw = await NeeSupabase.client.rpc(
+        'professional_whatsapp_number',
+        params: {'p_professional_id': professionalId},
+      );
+      final value = '$raw'.trim();
+      if (value.isEmpty || value == 'null') return null;
+      return PhoneMask.whatsapp(value);
+    } catch (error) {
+      debugPrint('Ñee: whatsapp: $error');
+      return null;
+    }
   }
 
   static Future<List<ServiceCategory>> loadCategories() async {

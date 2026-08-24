@@ -1,13 +1,38 @@
--- Perfil público de profissionais (user_type = Servicio). Sem e-mail, telefone ou documentos.
--- Rode no SQL Editor do Supabase para a Home separar verified.
+-- Perfil público de profissionais (user_type = Servicio). Sem e-mail, telefone completo ou documentos.
+-- phone_masked oculta os últimos 4 dígitos. O número completo só sai pelo RPC
+-- professional_whatsapp_number quando o profissional é verificado.
+-- Rode no SQL Editor do Supabase para a Home destacar verified=true.
 create or replace view public.professional_public_profiles as
 select
   u."UUID"::text as professional_id,
   u.name as display_name,
   u."imagemPerfil" as avatar_url,
   u."user_type" as user_type,
-  cat.nome as category_name,
-  u."categoriaId" as category_id,
+  coalesce(
+    cat_id.nome,
+    (
+      select c.nome
+      from public.categories c
+      where u."categoriaId" is null
+        and nullif(btrim(coalesce(u."Categoria", '')), '') is not null
+        and lower(btrim(c.nome)) = lower(btrim(u."Categoria"))
+      order by c.id
+      limit 1
+    ),
+    nullif(btrim(u."Categoria"), '')
+  ) as category_name,
+  coalesce(
+    u."categoriaId",
+    (
+      select c.id
+      from public.categories c
+      where u."categoriaId" is null
+        and nullif(btrim(coalesce(u."Categoria", '')), '') is not null
+        and lower(btrim(c.nome)) = lower(btrim(u."Categoria"))
+      order by c.id
+      limit 1
+    )
+  ) as category_id,
   u."Subcategoria" as specialty,
   u."descricaoSobre" as bio,
   u."Zona" as zone,
@@ -39,10 +64,24 @@ select
   coalesce(u."isDestacado", false) as is_featured,
   coalesce(u."isSuspenso", false) as is_suspended,
   coalesce(u."isBloqueado", false) as is_blocked,
+  u."statusDocumentos" as document_status,
   coalesce(u.verified, false) as verified,
-  u."statusDocumentos" as document_status
+  (
+    select case
+      when local = '' then null
+      when length(local) <= 4 then '+591 ••••'
+      else '+591 ' || left(local, length(local) - 4) || ' ••••'
+    end
+    from (
+      select regexp_replace(
+        regexp_replace(coalesce(u.phone, ''), '\D', '', 'g'),
+        '^591',
+        ''
+      ) as local
+    ) s
+  ) as phone_masked
 from public.users u
-left join public.categories cat on cat.id = u."categoriaId"
+left join public.categories cat_id on cat_id.id = u."categoriaId"
 where u."user_type" = 'Servicio'
   and coalesce(u."isDeletado", false) is not true;
 

@@ -8,7 +8,6 @@ import '../client/nee_motion.dart';
 import '../client/nee_on_air_tile.dart';
 import '../client/nee_status_pill.dart';
 import '../domain/chat.dart';
-import '../mock_data.dart';
 import '../models.dart';
 import '../domain/request_lifecycle.dart';
 import '../theme.dart';
@@ -16,6 +15,7 @@ import '../widgets.dart';
 import 'buscar_servicio_flow.dart';
 import 'chat_thread_screen.dart';
 import 'client_map_screen.dart';
+import 'direct_hire_flow.dart';
 import 'inbox_screen.dart';
 import 'professional_profile_screen.dart';
 import 'profile_hub.dart';
@@ -85,6 +85,7 @@ class ClientHomeScreen extends StatefulWidget {
 
 class _ClientHomeScreenState extends State<ClientHomeScreen> {
   String query = '';
+  int nearbyPage = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -103,10 +104,14 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       bool matches(Professional p) =>
           p.name.toLowerCase().contains(q) ||
           p.specialty.toLowerCase().contains(q) ||
+          p.categoryLabel.toLowerCase().contains(q) ||
           p.tags.any((t) => t.toLowerCase().contains(q));
       nearby = nearby.where(matches).toList();
       featured = featured.where(matches).toList();
     }
+    final pages = nearbyPageCount(nearby.length);
+    final page = pages == 0 ? 0 : nearbyPage.clamp(0, pages - 1);
+    final pageItems = nearbyPageOf(nearby, page);
     final ink = Theme.of(context).colorScheme.onSurface;
 
     return Scaffold(
@@ -169,7 +174,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
               children: [
                 TextField(
-                  onChanged: (value) => setState(() => query = value),
+                  onChanged: (value) => setState(() {
+                    query = value;
+                    nearbyPage = 0;
+                  }),
                   decoration: const InputDecoration(
                     hintText: '¿Qué servicio buscas hoy?',
                     prefixIcon: Icon(Icons.search),
@@ -210,24 +218,26 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                     widget.state.directoryError!,
                     style: TextStyle(color: ink.withValues(alpha: 0.62)),
                   ),
-                for (final pro in nearby.take(4)) ...[
+                for (final pro in pageItems) ...[
                   NeeOnAirTile(
                     professional: pro,
                     onOpen: () => _openPro(context, pro),
-                    onQuote: () => _openRequest(
+                    onQuote: () => startDirectHire(
                       context,
-                      widget.state.catalog.firstWhere(
-                        (c) =>
-                            c.id == pro.categoryId ||
-                            c.name.toLowerCase() ==
-                                (pro.categoryName ?? '').toLowerCase(),
-                        orElse: () => widget.state.catalog.isNotEmpty
-                            ? widget.state.catalog.first
-                            : categories.first,
-                      ),
+                      state: widget.state,
+                      professional: pro,
                     ),
                   ),
                   const SizedBox(height: 10),
+                ],
+                if (pages > 1) ...[
+                  const SizedBox(height: 4),
+                  _NearbyPager(
+                    page: page,
+                    pageCount: pages,
+                    total: nearby.length,
+                    onPage: (value) => setState(() => nearbyPage = value),
+                  ),
                 ],
                 const SizedBox(height: 10),
                 ],
@@ -285,6 +295,52 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
           professional: pro,
         ),
       ),
+    );
+  }
+}
+
+class _NearbyPager extends StatelessWidget {
+  const _NearbyPager({
+    required this.page,
+    required this.pageCount,
+    required this.total,
+    required this.onPage,
+  });
+
+  final int page;
+  final int pageCount;
+  final int total;
+  final ValueChanged<int> onPage;
+
+  @override
+  Widget build(BuildContext context) {
+    final ink = Theme.of(context).colorScheme.onSurface;
+    final canBack = page > 0;
+    final canNext = page < pageCount - 1;
+    return Row(
+      children: [
+        IconButton(
+          tooltip: 'Anterior',
+          onPressed: canBack ? () => onPage(page - 1) : null,
+          icon: const Icon(Icons.chevron_left_rounded),
+        ),
+        Expanded(
+          child: Text(
+            'Página ${page + 1} de $pageCount · $total',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: ink.withValues(alpha: 0.72),
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Siguiente',
+          onPressed: canNext ? () => onPage(page + 1) : null,
+          icon: const Icon(Icons.chevron_right_rounded),
+        ),
+      ],
     );
   }
 }

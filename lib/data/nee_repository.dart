@@ -281,24 +281,18 @@ class NeeRepository {
         : state.user.registeredAddress;
     try {
       state.catalog = await ProfessionalRepository.loadCategories();
-      final verified = await ProfessionalRepository.loadPublic(
+      final directory = await ProfessionalRepository.loadPublic(
         originLat: origin.latitude,
         originLng: origin.longitude,
-        verified: true,
-        limit: 30,
+        limit: 150,
       );
-      final nearby = await ProfessionalRepository.loadPublic(
-        originLat: origin.latitude,
-        originLng: origin.longitude,
-        verified: false,
-        limit: 40,
-      );
-      final byId = <String, Professional>{};
-      for (final pro in [...verified, ...nearby]) {
-        byId[pro.id] = pro;
-      }
-      state.directory = byId.values.toList()
-        ..sort((a, b) => (a.distanceKm ?? 1e9).compareTo(b.distanceKm ?? 1e9));
+      state.directory = directory
+        ..sort((a, b) {
+          final verifiedCmp =
+              (b.verified ? 1 : 0).compareTo(a.verified ? 1 : 0);
+          if (verifiedCmp != 0) return verifiedCmp;
+          return (a.distanceKm ?? 1e9).compareTo(b.distanceKm ?? 1e9);
+        });
       state.directoryError = null;
       await HireRepository.applyStatuses(state.directory);
     } catch (error) {

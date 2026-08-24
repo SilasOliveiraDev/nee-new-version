@@ -1,4 +1,5 @@
 import '../domain/availability.dart';
+import '../domain/phone_mask.dart';
 import '../mock_data.dart';
 import '../models.dart';
 import '../places/geo_match.dart';
@@ -59,14 +60,22 @@ Professional professionalFromUserRow(
       (row['name'] as String?)?.trim() ??
       '';
   final coords = parseLatLng(row['latlng']);
-  final categoryName = (row['category_name'] as String?)?.trim() ??
-      (row['category_name'] as String?)?.trim() ??
+  final rawCategory = (row['category_name'] as String?)?.trim() ??
       (row['Categoria'] as String?)?.trim();
   final categoryId = mapCategoryId(
     categoriaId: row['category_id'] ?? row['categoriaId'],
-    categoria: categoryName,
+    categoria: rawCategory,
     subcategoria: (row['specialty'] as String?) ?? (row['Subcategoria'] as String?),
   );
+  var categoryName = rawCategory;
+  if (categoryName == null || categoryName.isEmpty) {
+    for (final category in categories) {
+      if (category.id == categoryId || category.id == '${row['category_id']}') {
+        categoryName = category.name;
+        break;
+      }
+    }
+  }
   final specialty = (row['specialty'] as String?)?.trim().isNotEmpty == true
       ? row['specialty'] as String
       : ((row['Subcategoria'] as String?)?.trim().isNotEmpty == true
@@ -117,6 +126,7 @@ Professional professionalFromUserRow(
       (row['descricaoSobre'] as String?)?.trim();
   final avatar = (row['avatar_url'] as String?)?.trim() ??
       (row['imagemPerfil'] as String?)?.trim();
+  final phoneMasked = _phoneMaskedFrom(row);
   if (id.isEmpty) {
     assert(() {
       // ignore: avoid_print
@@ -152,10 +162,19 @@ Professional professionalFromUserRow(
     avatarUrl: (avatar ?? '').isEmpty ? null : avatar,
     bio: (bio ?? '').isEmpty ? null : bio,
     serviceArea: serviceArea.isEmpty ? null : serviceArea,
+    phoneMasked: phoneMasked,
     acceptingRequests: !blocked && !suspended,
     opsStatus: blocked || suspended ? ProOpsStatus.paused : ProOpsStatus.offline,
     tags: [
       if (serviceArea.isNotEmpty) serviceArea,
     ],
   );
+}
+
+String? _phoneMaskedFrom(Map<String, dynamic> row) {
+  final masked = (row['phone_masked'] as String?)?.trim();
+  if (masked != null && masked.isNotEmpty) return masked;
+  final raw = (row['phone'] as String?)?.trim() ?? '';
+  if (raw.isEmpty) return null;
+  return PhoneMask.display(raw);
 }

@@ -38,7 +38,7 @@ void main() {
     expect(pro.verified, isFalse);
   });
 
-  test('verified users from users.verified go to destacados only', () {
+  test('verified users stay in Cerca de ti and also fill destacados', () {
     final verified = professionalFromUserRow({
       'professional_id': 'v1',
       'display_name': 'Ana Verificada',
@@ -56,9 +56,31 @@ void main() {
     expect(verified.verified, isTrue);
     expect(nearby.verified, isFalse);
 
-    final catalog = [verified, nearby];
+    final catalog = [nearby, verified];
     expect(featuredOnAir(catalog).map((p) => p.id), ['v1']);
-    expect(onAirNearby(catalog).map((p) => p.id), ['n1']);
+    expect(onAirNearby(catalog).map((p) => p.id), ['v1', 'n1']);
+  });
+
+  test('verified professionals without coordinates still appear nearby', () {
+    final verified = professionalFromUserRow({
+      'professional_id': 'v2',
+      'display_name': 'Karla Verificada',
+      'user_type': 'Servicio',
+      'verified': true,
+    });
+    final nearby = professionalFromUserRow(
+      {
+        'professional_id': 'n2',
+        'display_name': 'Luis Cerca',
+        'user_type': 'Servicio',
+        'verified': false,
+        'latlng': '-17.78,-63.18',
+      },
+      originLat: -17.781,
+      originLng: -63.18,
+    );
+    final catalog = [nearby, verified];
+    expect(onAirNearby(catalog).map((p) => p.id), ['v2', 'n2']);
   });
 
   test('computes distance only with both coordinates', () {
@@ -79,5 +101,46 @@ void main() {
   test('cliente user type is not a provider', () {
     expect(isProviderType('Cliente'), isFalse);
     expect(isProviderType('Servicio'), isTrue);
+  });
+
+  test('cerca de ti pages 15 professionals at a time', () {
+    final catalog = [
+      for (var i = 0; i < 37; i++)
+        professionalFromUserRow({
+          'professional_id': 'p$i',
+          'display_name': 'Pro $i',
+          'user_type': 'Servicio',
+          'verified': false,
+        }),
+    ];
+    expect(nearbyPageCount(catalog.length), 3);
+    expect(nearbyPageOf(catalog, 0), hasLength(15));
+    expect(nearbyPageOf(catalog, 1), hasLength(15));
+    expect(nearbyPageOf(catalog, 2).map((p) => p.id), ['p30', 'p31', 'p32', 'p33', 'p34', 'p35', 'p36']);
+  });
+
+  test('maps category_name onto the professional card label', () {
+    final pro = professionalFromUserRow({
+      'professional_id': 'c1',
+      'display_name': 'Ana Plomería',
+      'user_type': 'Servicio',
+      'category_name': 'Plomería',
+      'category_id': 1,
+      'specialty': 'Destapes',
+    });
+    expect(pro.categoryLabel, 'Plomería');
+    expect(pro.specialtyIfDifferent, 'Destapes');
+  });
+
+  test('uses Categoria text when category_id is missing', () {
+    final pro = professionalFromUserRow({
+      'professional_id': 'c2',
+      'display_name': 'Jhonni',
+      'user_type': 'Servicio',
+      'Categoria': 'Jardinería',
+      'specialty': '',
+    });
+    expect(pro.categoryLabel, 'Jardinería');
+    expect(pro.specialtyIfDifferent, isNull);
   });
 }

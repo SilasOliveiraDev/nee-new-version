@@ -30,6 +30,40 @@ class NeeLogo extends StatelessWidget {
   }
 }
 
+class NeeSplashMark extends StatelessWidget {
+  const NeeSplashMark({super.key, this.logoHeight = 148});
+
+  final double logoHeight;
+
+  static const slogan = 'El oficio que necesitas, cerca de ti.';
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          NeeLogo(height: logoHeight, lockup: true),
+          const SizedBox(height: 22),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 280),
+            child: Text(
+              slogan,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: NeeColors.muted,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class CategoryCard extends StatelessWidget {
   const CategoryCard({
     super.key,

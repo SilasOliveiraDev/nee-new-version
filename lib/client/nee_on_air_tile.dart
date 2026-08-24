@@ -20,12 +20,16 @@ class NeeOnAirTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final ink = Theme.of(context).colorScheme.onSurface;
     final face = Theme.of(context).colorScheme.surface;
+    final verified = professional.verified;
     return Material(
-      color: face,
+      color: verified ? NeeColors.vest.withValues(alpha: 0.16) : face,
       elevation: 0,
       shadowColor: NeeColors.soot.withValues(alpha: 0.12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(NeeRadii.tile),
+        side: verified
+            ? const BorderSide(color: NeeColors.vest, width: 1.6)
+            : BorderSide(color: ink.withValues(alpha: 0.06)),
       ),
       child: InkWell(
         onTap: onOpen,
@@ -48,27 +52,34 @@ class NeeOnAirTile extends StatelessWidget {
                         color: ink,
                       ),
                     ),
-                    Text(
-                      professional.specialty,
-                      style: TextStyle(
-                        color: ink.withValues(alpha: 0.62),
-                        fontSize: 13,
+                    if (professional.categoryLabel.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      _CategoryChip(label: professional.categoryLabel),
+                    ],
+                    if (professional.specialtyIfDifferent != null)
+                      Text(
+                        professional.specialtyIfDifferent!,
+                        style: TextStyle(
+                          color: ink.withValues(alpha: 0.62),
+                          fontSize: 13,
+                        ),
                       ),
-                    ),
                     const SizedBox(height: 6),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         NeeOnAirMark(
                           professional: professional,
                           compact: true,
                         ),
-                        if (professional.distanceLabel != null) ...[
-                        const SizedBox(width: 10),
-                        Text(
-                          professional.distanceLabel!,
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                        ],
+                        if (verified) const NeeVerifiedBadge(),
+                        if (professional.distanceLabel != null)
+                          Text(
+                            professional.distanceLabel!,
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
                       ],
                     ),
                   ],
@@ -89,6 +100,34 @@ class NeeOnAirTile extends StatelessWidget {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryChip extends StatelessWidget {
+  const _CategoryChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: NeeColors.chalk,
+        borderRadius: BorderRadius.circular(NeeRadii.pill),
+        border: Border.all(color: NeeColors.soot.withValues(alpha: 0.12)),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          color: NeeColors.soot,
         ),
       ),
     );
@@ -129,8 +168,6 @@ class NeeFeaturedAirCard extends StatelessWidget {
                 Row(
                   children: [
                     _SignalAvatar(professional: professional, radius: 24),
-                    const Spacer(),
-                    const Icon(Icons.verified, color: NeeColors.vest, size: 20),
                   ],
                 ),
                 const Spacer(),
@@ -145,6 +182,10 @@ class NeeFeaturedAirCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
+                if (professional.categoryLabel.isNotEmpty)
+                  _CategoryChip(label: professional.categoryLabel),
+                if (professional.categoryLabel.isNotEmpty)
+                  const SizedBox(height: 4),
                 const NeeVerifiedBadge(),
                 const SizedBox(height: 6),
                 Text(
@@ -198,22 +239,55 @@ class _SignalAvatar extends StatelessWidget {
     final lit = professional.available;
     final url = professional.avatarUrl;
     final network = url != null && url.startsWith('http') ? url : null;
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: lit ? NeeColors.vest : Theme.of(context).colorScheme.surface,
-      foregroundColor: NeeColors.soot,
-      backgroundImage: network == null ? null : NetworkImage(network),
-      child: network == null
-          ? Text(
-              professional.initials,
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                color: lit
-                    ? NeeColors.soot
-                    : Theme.of(context).colorScheme.onSurface,
+    final badge = radius * 0.72;
+    return SizedBox(
+      width: radius * 2 + 6,
+      height: radius * 2 + 6,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            top: 2,
+            left: 0,
+            child: CircleAvatar(
+              radius: radius,
+              backgroundColor:
+                  lit ? NeeColors.vest : Theme.of(context).colorScheme.surface,
+              foregroundColor: NeeColors.soot,
+              backgroundImage: network == null ? null : NetworkImage(network),
+              child: network == null
+                  ? Text(
+                      professional.initials,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: lit
+                            ? NeeColors.soot
+                            : Theme.of(context).colorScheme.onSurface,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+          if (professional.verified)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Container(
+                width: badge,
+                height: badge,
+                decoration: const BoxDecoration(
+                  color: NeeColors.chalk,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.verified,
+                  color: NeeColors.vest,
+                  size: badge - 2,
+                ),
               ),
-            )
-          : null,
+            ),
+        ],
+      ),
     );
   }
 }

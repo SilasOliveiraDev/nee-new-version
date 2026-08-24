@@ -50,7 +50,7 @@ class _SplashStepState extends State<_SplashStep> {
   @override
   void initState() {
     super.initState();
-    Future<void>.delayed(const Duration(milliseconds: 1100), () {
+    Future<void>.delayed(const Duration(milliseconds: 2000), () {
       if (mounted && widget.state.step == OnboardingStep.splash) {
         widget.state.goTo(OnboardingStep.value);
       }
@@ -62,7 +62,7 @@ class _SplashStepState extends State<_SplashStep> {
     return const Scaffold(
       backgroundColor: NeeColors.paper,
       body: Center(
-        child: NeeLogo(height: 168, lockup: true),
+        child: NeeSplashMark(logoHeight: 168),
       ),
     );
   }

@@ -89,6 +89,15 @@ extension RequestStatusLabel on RequestStatus {
 
 enum WorkPreview { photo, video }
 
+bool looksLikeAreaLabel(String raw) {
+  final t = raw.trim().toLowerCase();
+  if (t.isEmpty) return false;
+  return t.contains('anillo') ||
+      t.contains('plan 3000') ||
+      t.contains('distrito') ||
+      t.contains('equipetrol');
+}
+
 class Professional {
   const Professional({
     required this.id,
@@ -119,6 +128,7 @@ class Professional {
     this.categoryName,
     this.serviceArea,
     this.phoneMasked,
+    this.hasReportedAvailability = false,
   });
 
   final String id;
@@ -149,11 +159,12 @@ class Professional {
   final String? categoryName;
   final String? serviceArea;
   final String? phoneMasked;
+  final bool hasReportedAvailability;
 
-  bool get isNewProfessional => ratingCount == 0 && rating <= 0;
+  bool get isNewProfessional => ratingCount == 0 && rating <= 0 && jobs <= 0;
 
-  String get ratingLabel {
-    if (isNewProfessional) return 'Nuevo profesional';
+  String? get ratingLabel {
+    if (isNewProfessional || (ratingCount == 0 && rating <= 0)) return null;
     final avg = rating.toStringAsFixed(1);
     if (ratingCount <= 0) return '⭐ $avg';
     return '⭐ $avg · $ratingCount';
@@ -166,8 +177,18 @@ class Professional {
 
   String get categoryLabel {
     final named = (categoryName ?? '').trim();
-    if (named.isNotEmpty) return named;
-    return specialty.trim();
+    if (named.isNotEmpty && !looksLikeAreaLabel(named)) return named;
+    final spec = specialty.trim();
+    if (spec.isNotEmpty && !looksLikeAreaLabel(spec)) return spec;
+    return '';
+  }
+
+  String? get areaLabel {
+    final area = (serviceArea ?? '').trim();
+    if (area.isNotEmpty) return area;
+    final loc = city.trim();
+    if (loc.isEmpty) return null;
+    return loc;
   }
 
   String? get specialtyIfDifferent {
@@ -226,6 +247,7 @@ class Professional {
       categoryName: categoryName,
       serviceArea: serviceArea,
       phoneMasked: phoneMasked,
+      hasReportedAvailability: true,
     );
   }
 

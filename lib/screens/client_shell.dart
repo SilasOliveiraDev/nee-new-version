@@ -253,7 +253,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
-                  height: 196,
+                  height: 220,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: featured.length,

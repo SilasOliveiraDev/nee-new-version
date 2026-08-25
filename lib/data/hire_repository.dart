@@ -48,9 +48,10 @@ class HireRepository {
       for (var i = 0; i < directory.length; i++) {
         final raw = payload[directory[i].id];
         if (raw is Map) {
-          directory[i] = directory[i].withAvailability(
-            AvailabilityView.fromJson(Map<String, dynamic>.from(raw)),
-          );
+          final view = AvailabilityView.fromJson(Map<String, dynamic>.from(raw));
+          if (view.reported) {
+            directory[i] = directory[i].withAvailability(view);
+          }
         }
       }
     } catch (error) {

@@ -7,6 +7,7 @@ import '../data/nee_supabase.dart';
 import '../data/professional_repository.dart';
 import '../domain/availability.dart';
 import '../models.dart';
+import '../client/nee_on_air_tile.dart';
 import '../theme.dart';
 import '../widgets/nee_sheets.dart';
 import 'direct_hire_flow.dart';
@@ -56,7 +57,9 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
       if (!mounted) return;
       setState(() {
         _view = ProfessionalProfileView(
-          professional: loaded.professional.withAvailability(status),
+          professional: status.reported
+              ? loaded.professional.withAvailability(status)
+              : loaded.professional,
           portfolio: loaded.portfolio,
           reviews: loaded.reviews,
         );
@@ -267,7 +270,8 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
             label: 'Opiniones',
           ),
           const SizedBox(height: 8),
-          Text(professional.ratingLabel),
+          if (professional.ratingLabel != null)
+            Text(professional.ratingLabel!),
           for (final review in _view!.reviews.take(3)) ...[
             const SizedBox(height: 10),
             Text('⭐ ${review.rating.toStringAsFixed(1)}'),
@@ -321,22 +325,38 @@ class _IdentityCard extends StatelessWidget {
                     ),
                   ),
                 ],
-                const SizedBox(height: 4),
-                Text(
-                  professional.ratingLabel,
-                  style: const TextStyle(color: NeeColors.muted),
-                ),
+                if (professional.areaLabel != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    professional.areaLabel!,
+                    style: const TextStyle(color: NeeColors.muted, fontSize: 13),
+                  ),
+                ],
+                if (professional.ratingLabel != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    professional.ratingLabel!,
+                    style: const TextStyle(color: NeeColors.muted),
+                  ),
+                ],
+                const SizedBox(height: 2),
                 Text(
                   professional.jobsLabel,
                   style: const TextStyle(color: NeeColors.muted, fontSize: 13),
                 ),
+                if (professional.verified) ...[
+                  const SizedBox(height: 8),
+                  const NeeVerifiedBadge(),
+                ],
                 if (professional.distanceLabel != null)
                   Text(
                     '📍 ${professional.distanceLabel} de ti',
                     style: const TextStyle(color: NeeColors.muted, fontSize: 13),
                   ),
-                const SizedBox(height: 10),
-                _AvailabilityPill(view: professional.availability),
+                if (professional.hasReportedAvailability) ...[
+                  const SizedBox(height: 10),
+                  _AvailabilityPill(view: professional.availability),
+                ],
               ],
             ),
           ),

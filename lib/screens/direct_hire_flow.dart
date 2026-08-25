@@ -80,7 +80,7 @@ class _DirectHireFlowState extends State<DirectHireFlow> {
       place = ServiceLocationSnapshot.fromPlace(saved);
     }
     HireRepository.statusFor(pro.id).then((view) {
-      if (!mounted) return;
+      if (!mounted || !view.reported) return;
       setState(() => live = view);
     });
   }

@@ -15,11 +15,16 @@ select
       from public.categories c
       where u."categoriaId" is null
         and nullif(btrim(coalesce(u."Categoria", '')), '') is not null
+        and lower(btrim(u."Categoria")) !~ '(anillo|plan 3000|distrito|equipetrol)'
         and lower(btrim(c.nome)) = lower(btrim(u."Categoria"))
       order by c.id
       limit 1
     ),
-    nullif(btrim(u."Categoria"), '')
+    case
+      when lower(btrim(coalesce(u."Categoria", ''))) ~ '(anillo|plan 3000|distrito|equipetrol)'
+        then null
+      else nullif(btrim(u."Categoria"), '')
+    end
   ) as category_name,
   coalesce(
     u."categoriaId",
@@ -28,6 +33,7 @@ select
       from public.categories c
       where u."categoriaId" is null
         and nullif(btrim(coalesce(u."Categoria", '')), '') is not null
+        and lower(btrim(u."Categoria")) !~ '(anillo|plan 3000|distrito|equipetrol)'
         and lower(btrim(c.nome)) = lower(btrim(u."Categoria"))
       order by c.id
       limit 1

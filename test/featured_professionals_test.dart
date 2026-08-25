@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nee/client/air_query.dart';
 import 'package:nee/data/professional_mapper.dart';
 import 'package:nee/mock_data.dart';
+import 'package:nee/models.dart';
 
 void main() {
   test('only active providers from a catalog are offered to the client', () {
@@ -33,7 +34,7 @@ void main() {
     expect(pro.initials, 'RG');
     expect(pro.distanceKm, isNull);
     expect(pro.distanceLabel, isNull);
-    expect(pro.ratingLabel, 'Nuevo profesional');
+    expect(pro.ratingLabel, isNull);
     expect(pro.jobsLabel, 'Nuevo en Ñee');
     expect(pro.verified, isFalse);
   });
@@ -142,5 +143,32 @@ void main() {
     });
     expect(pro.categoryLabel, 'Jardinería');
     expect(pro.specialtyIfDifferent, isNull);
+  });
+
+  test('Categoria that looks like a zone is not used as the trade', () {
+    final pro = professionalFromUserRow({
+      'professional_id': 'z1',
+      'display_name': 'Roberto Carlos',
+      'user_type': 'Servicio',
+      'Categoria': '2 anillo',
+      'Zona': '2 anillo',
+    });
+    expect(pro.categoryLabel, isEmpty);
+    expect(pro.areaLabel, '2 anillo');
+    expect(looksLikeAreaLabel('Plan 3000'), isTrue);
+    expect(looksLikeAreaLabel('Tecnología'), isFalse);
+  });
+
+  test('new professionals do not invent a star rating', () {
+    final rated = professionalFromUserRow({
+      'professional_id': 'r1',
+      'display_name': 'Eva Estrella',
+      'user_type': 'Servicio',
+      'reviews_average': 4.8,
+      'rating_count': 12,
+      'completed_jobs_count': 3,
+    });
+    expect(rated.ratingLabel, '⭐ 4.8 · 12');
+    expect(rated.jobsLabel, '3 trabajos realizados');
   });
 }

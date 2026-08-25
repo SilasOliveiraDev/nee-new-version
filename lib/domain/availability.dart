@@ -18,12 +18,14 @@ class AvailabilityView {
     required this.acceptingRequests,
     this.nextAvailableAt,
     this.labelCode = 'AVAILABLE_NOW',
+    this.reported = false,
   });
 
   final ProOpsStatus status;
   final bool acceptingRequests;
   final DateTime? nextAvailableAt;
   final String labelCode;
+  final bool reported;
 
   bool get availableNow =>
       acceptingRequests && status == ProOpsStatus.available;
@@ -81,6 +83,7 @@ class AvailabilityView {
       acceptingRequests: json['accepting_requests'] != false,
       nextAvailableAt: DateTime.tryParse('${json['next_available_at'] ?? ''}'),
       labelCode: '${json['label_code'] ?? ''}',
+      reported: json['reported'] == true,
     );
   }
 }

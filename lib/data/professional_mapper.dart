@@ -60,14 +60,15 @@ Professional professionalFromUserRow(
       (row['name'] as String?)?.trim() ??
       '';
   final coords = parseLatLng(row['latlng']);
-  final rawCategory = (row['category_name'] as String?)?.trim() ??
-      (row['Categoria'] as String?)?.trim();
+  final rawCategoria = (row['Categoria'] as String?)?.trim();
+  final viewCategory = (row['category_name'] as String?)?.trim();
+  final tradeName = _asTradeLabel(viewCategory) ?? _asTradeLabel(rawCategoria);
   final categoryId = mapCategoryId(
     categoriaId: row['category_id'] ?? row['categoriaId'],
-    categoria: rawCategory,
+    categoria: tradeName,
     subcategoria: (row['specialty'] as String?) ?? (row['Subcategoria'] as String?),
   );
-  var categoryName = rawCategory;
+  var categoryName = tradeName;
   if (categoryName == null || categoryName.isEmpty) {
     for (final category in categories) {
       if (category.id == categoryId || category.id == '${row['category_id']}') {
@@ -76,14 +77,18 @@ Professional professionalFromUserRow(
       }
     }
   }
-  final specialty = (row['specialty'] as String?)?.trim().isNotEmpty == true
+  final specialtyRaw = (row['specialty'] as String?)?.trim().isNotEmpty == true
       ? row['specialty'] as String
       : ((row['Subcategoria'] as String?)?.trim().isNotEmpty == true
           ? row['Subcategoria'] as String
           : (categoryName ?? ''));
-  final zone = (row['zone'] as String?)?.trim() ??
+  final specialty = _asTradeLabel(specialtyRaw) ?? specialtyRaw;
+  var zone = (row['zone'] as String?)?.trim() ??
       (row['Zona'] as String?)?.trim() ??
       '';
+  if (zone.isEmpty && rawCategoria != null && looksLikeAreaLabel(rawCategoria)) {
+    zone = rawCategoria;
+  }
   final city = (row['city'] as String?)?.trim().isNotEmpty == true
       ? row['city'] as String
       : ((row['cidade'] as String?)?.trim() ?? '');
@@ -169,6 +174,12 @@ Professional professionalFromUserRow(
       if (serviceArea.isNotEmpty) serviceArea,
     ],
   );
+}
+
+String? _asTradeLabel(String? raw) {
+  final value = (raw ?? '').trim();
+  if (value.isEmpty || looksLikeAreaLabel(value)) return null;
+  return value;
 }
 
 String? _phoneMaskedFrom(Map<String, dynamic> row) {

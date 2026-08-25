@@ -70,9 +70,19 @@ class NeeOnAirTile extends StatelessWidget {
                       runSpacing: 6,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        NeeOnAirMark(
-                          professional: professional,
-                          compact: true,
+                        if (professional.hasReportedAvailability)
+                          NeeOnAirMark(
+                            professional: professional,
+                            compact: true,
+                          ),
+                        if (professional.areaLabel != null)
+                          Text(
+                            professional.areaLabel!,
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        Text(
+                          professional.ratingLabel ?? professional.jobsLabel,
+                          style: Theme.of(context).textTheme.labelSmall,
                         ),
                         if (verified) const NeeVerifiedBadge(),
                         if (professional.distanceLabel != null)
@@ -155,7 +165,10 @@ class NeeFeaturedAirCard extends StatelessWidget {
         shadowColor: NeeColors.soot.withValues(alpha: 0.16),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(NeeRadii.tile),
-          side: const BorderSide(color: NeeColors.vest, width: 1.6),
+          side: BorderSide(
+            color: professional.verified ? NeeColors.vest : ink.withValues(alpha: 0.08),
+            width: professional.verified ? 1.6 : 1,
+          ),
         ),
         child: InkWell(
           onTap: onOpen,
@@ -186,11 +199,22 @@ class NeeFeaturedAirCard extends StatelessWidget {
                   _CategoryChip(label: professional.categoryLabel),
                 if (professional.categoryLabel.isNotEmpty)
                   const SizedBox(height: 4),
-                const NeeVerifiedBadge(),
-                const SizedBox(height: 6),
+                if (professional.areaLabel != null) ...[
+                  Text(
+                    professional.areaLabel!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                  const SizedBox(height: 4),
+                ],
+                if (professional.verified) ...[
+                  const NeeVerifiedBadge(),
+                  const SizedBox(height: 6),
+                ],
                 Text(
                   [
-                    professional.ratingLabel,
+                    professional.ratingLabel ?? professional.jobsLabel,
                     if (professional.distanceLabel != null)
                       professional.distanceLabel!,
                   ].join('  '),

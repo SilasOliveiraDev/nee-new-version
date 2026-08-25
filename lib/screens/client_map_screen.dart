@@ -3,13 +3,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../app_state.dart';
-import '../client/air_query.dart';
-import '../client/nee_motion.dart';
-import '../client/nee_on_air_tile.dart';
 import '../mock_data.dart';
 import '../models.dart';
 import '../theme.dart';
-import 'direct_hire_flow.dart';
 import 'professional_profile_screen.dart';
 
 class ClientMapScreen extends StatefulWidget {
@@ -30,16 +26,26 @@ class _ClientMapScreenState extends State<ClientMapScreen>
   bool get wantKeepAlive => true;
 
   List<Professional> get _pins {
-    var list = onAirNearby(
-      widget.state.highlightedProfessionals,
-      includeVerified: true,
-    )
-        .where((p) => p.hasMapPin)
-        .toList();
+    var list = widget.state.highlightedProfessionals
+        .where((p) => p.hasMapPin && p.latitude != null && p.longitude != null)
+        .toList()
+      ..sort((a, b) => (a.distanceKm ?? 1e9).compareTo(b.distanceKm ?? 1e9));
     if (categoryId != null) {
-      list = list.where((p) => p.categoryId == categoryId).toList();
+      list = list.where((p) => _matchesTrade(p, categoryId!)).toList();
     }
     return list;
+  }
+
+  bool _matchesTrade(Professional professional, String filterId) {
+    if (professional.categoryId == filterId) return true;
+    for (final cat in categories) {
+      if (cat.id != filterId) continue;
+      final label = professional.categoryLabel.toLowerCase();
+      final name = cat.name.toLowerCase();
+      if (label.isEmpty) return false;
+      return label == name || label.contains(name) || name.contains(label);
+    }
+    return false;
   }
 
   LatLng get _center {
@@ -79,8 +85,12 @@ class _ClientMapScreenState extends State<ClientMapScreen>
                       for (final pro in pins)
                         Marker(
                           point: LatLng(pro.latitude!, pro.longitude!),
-                          width: 28 + (pro.signal * 22),
-                          height: 28 + (pro.signal * 22),
+                          width: pro.pinApproximate
+                              ? 22 + (pro.signal * 14)
+                              : 28 + (pro.signal * 22),
+                          height: pro.pinApproximate
+                              ? 22 + (pro.signal * 14)
+                              : 28 + (pro.signal * 22),
                           child: GestureDetector(
                             onTap: () => setState(() => selected = pro),
                             child: _AirPin(
@@ -147,52 +157,22 @@ class _ClientMapScreenState extends State<ClientMapScreen>
                     ),
                   ),
                 )
-              else
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(12, 0, 12, pad.bottom + 12),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.sizeOf(context).height * 0.42,
-                      ),
-                      child: selected == null
-                          ? _PeekList(
-                              people: pins.take(3).toList(),
-                              onOpen: _openPro,
-                              onTune: _tune,
-                            )
-                          : NeeOnAirTile(
-                              professional: selected!,
-                              onOpen: () => _openPro(selected!),
-                              onQuote: () => _tune(selected!),
-                            ),
-                    ),
+              else if (selected != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: MediaQuery.sizeOf(context).height * 0.5,
+                  child: MapProfessionalSheet(
+                    key: ValueKey(selected!.id),
+                    state: widget.state,
+                    professional: selected!,
                   ),
                 ),
             ],
           ),
         );
       },
-    );
-  }
-
-  void _openPro(Professional pro) {
-    Navigator.of(context).push(
-      NeeTunePage(
-        child: ProfessionalProfileScreen(
-          state: widget.state,
-          professional: pro,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _tune(Professional pro) {
-    return startDirectHire(
-      context,
-      state: widget.state,
-      professional: pro,
     );
   }
 }
@@ -210,7 +190,9 @@ class _AirPin extends StatelessWidget {
       duration: const Duration(milliseconds: 180),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: NeeColors.vest,
+          color: professional.pinApproximate
+              ? NeeColors.vest.withValues(alpha: 0.82)
+              : NeeColors.vest,
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
@@ -293,35 +275,6 @@ class _MapChip extends StatelessWidget {
         fontWeight: FontWeight.w700,
         color: NeeColors.soot,
       ),
-    );
-  }
-}
-
-class _PeekList extends StatelessWidget {
-  const _PeekList({
-    required this.people,
-    required this.onOpen,
-    required this.onTune,
-  });
-
-  final List<Professional> people;
-  final ValueChanged<Professional> onOpen;
-  final ValueChanged<Professional> onTune;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      shrinkWrap: true,
-      children: [
-        for (final pro in people) ...[
-          NeeOnAirTile(
-            professional: pro,
-            onOpen: () => onOpen(pro),
-            onQuote: () => onTune(pro),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ],
     );
   }
 }

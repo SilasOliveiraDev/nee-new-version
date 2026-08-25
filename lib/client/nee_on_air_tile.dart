@@ -19,10 +19,12 @@ class NeeOnAirTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ink = Theme.of(context).colorScheme.onSurface;
-    final face = Theme.of(context).colorScheme.surface;
     final verified = professional.verified;
+    final face = verified
+        ? Color.alphaBlend(NeeColors.vest.withValues(alpha: 0.28), NeeColors.chalk)
+        : Theme.of(context).colorScheme.surface;
     return Material(
-      color: verified ? NeeColors.vest.withValues(alpha: 0.16) : face,
+      color: face,
       elevation: 0,
       shadowColor: NeeColors.soot.withValues(alpha: 0.12),
       shape: RoundedRectangleBorder(
@@ -75,7 +77,12 @@ class NeeOnAirTile extends StatelessWidget {
                             professional: professional,
                             compact: true,
                           ),
-                        if (professional.areaLabel != null)
+                        if (professional.approximatePinLabel != null)
+                          Text(
+                            professional.approximatePinLabel!,
+                            style: Theme.of(context).textTheme.labelSmall,
+                          )
+                        else if (professional.areaLabel != null)
                           Text(
                             professional.areaLabel!,
                             style: Theme.of(context).textTheme.labelSmall,
@@ -199,7 +206,15 @@ class NeeFeaturedAirCard extends StatelessWidget {
                   _CategoryChip(label: professional.categoryLabel),
                 if (professional.categoryLabel.isNotEmpty)
                   const SizedBox(height: 4),
-                if (professional.areaLabel != null) ...[
+                if (professional.approximatePinLabel != null) ...[
+                  Text(
+                    professional.approximatePinLabel!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                  const SizedBox(height: 4),
+                ] else if (professional.areaLabel != null) ...[
                   Text(
                     professional.areaLabel!,
                     maxLines: 1,

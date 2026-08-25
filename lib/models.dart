@@ -117,6 +117,7 @@ class Professional {
     this.latitude,
     this.longitude,
     this.hasMapPin = false,
+    this.pinApproximate = false,
     this.isDestaque = false,
     this.isProvider = true,
     this.tags = const [],
@@ -148,6 +149,7 @@ class Professional {
   final double? latitude;
   final double? longitude;
   final bool hasMapPin;
+  final bool pinApproximate;
   final bool isDestaque;
   final bool isProvider;
   final List<String> tags;
@@ -189,6 +191,13 @@ class Professional {
     final loc = city.trim();
     if (loc.isEmpty) return null;
     return loc;
+  }
+
+  String? get approximatePinLabel {
+    if (!pinApproximate) return null;
+    final area = areaLabel;
+    if (area == null || area.isEmpty) return 'Ubicación aproximada';
+    return 'Ubicación aproximada · $area';
   }
 
   String? get specialtyIfDifferent {
@@ -236,6 +245,7 @@ class Professional {
       latitude: latitude,
       longitude: longitude,
       hasMapPin: hasMapPin,
+      pinApproximate: pinApproximate,
       isDestaque: isDestaque,
       isProvider: isProvider,
       tags: tags,

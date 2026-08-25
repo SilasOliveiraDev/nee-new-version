@@ -659,6 +659,208 @@ class _MediaViewer extends StatelessWidget {
   }
 }
 
+class MapProfessionalSheet extends StatefulWidget {
+  const MapProfessionalSheet({
+    super.key,
+    required this.state,
+    required this.professional,
+  });
+
+  final NeeAppState state;
+  final Professional professional;
+
+  @override
+  State<MapProfessionalSheet> createState() => _MapProfessionalSheetState();
+}
+
+class _MapProfessionalSheetState extends State<MapProfessionalSheet> {
+  ProfessionalProfileView? _view;
+  var _openingChat = false;
+
+  Professional get _pro => _view?.professional ?? widget.professional;
+
+  @override
+  void initState() {
+    super.initState();
+    _hydrate();
+  }
+
+  @override
+  void didUpdateWidget(MapProfessionalSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.professional.id != widget.professional.id) {
+      _view = null;
+      _hydrate();
+    }
+  }
+
+  Future<void> _hydrate() async {
+    try {
+      final origin = widget.state.user.currentLocation.hasCoords
+          ? widget.state.user.currentLocation
+          : widget.state.user.registeredAddress;
+      final loaded = await ProfessionalRepository.loadProfile(
+        widget.professional.id,
+        originLat: origin.latitude,
+        originLng: origin.longitude,
+      );
+      if (!mounted) return;
+      setState(() => _view = loaded);
+    } catch (_) {}
+  }
+
+  Future<void> _openWhatsApp() async {
+    final professional = _pro;
+    if (_openingChat) return;
+    if (!professional.verified) {
+      await showInformationSheet(
+        context,
+        title: 'WhatsApp bloqueado',
+        body:
+            'El teléfono se desbloquea cuando el profesional está verificado. Mientras tanto, puedes solicitar el servicio desde Ñee.',
+      );
+      return;
+    }
+    setState(() => _openingChat = true);
+    try {
+      final number = await ProfessionalRepository.whatsappNumber(
+        professional.id,
+      );
+      if (!mounted) return;
+      if (number == null || number.isEmpty) {
+        await showErrorSheet(
+          context,
+          title: 'No se pudo abrir WhatsApp',
+          body: 'Este profesional aún no tiene un número disponible.',
+        );
+        return;
+      }
+      final uri = Uri.parse('https://wa.me/$number');
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } finally {
+      if (mounted) setState(() => _openingChat = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final professional = _pro;
+    final phone = (professional.phoneMasked ?? '').trim();
+    final past = widget.state.requests.where(
+      (r) =>
+          r.professional?.id == professional.id &&
+          r.status == RequestStatus.completed,
+    );
+    final canHire = professional.isProvider &&
+        professional.isActive &&
+        professional.availability.acceptingRequests;
+    return Material(
+      color: NeeColors.paper,
+      elevation: 16,
+      shadowColor: NeeColors.soot.withValues(alpha: 0.28),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          const SizedBox(height: 10),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: NeeColors.soot.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(99),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+              children: [
+                _IdentityCard(professional: professional),
+                if (professional.approximatePinLabel != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    professional.approximatePinLabel!,
+                    style: const TextStyle(
+                      color: NeeColors.muted,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                _SectionTitle(
+                  icon: Icons.menu_book_outlined,
+                  label: 'Sobre ${professional.firstName}',
+                ),
+                const SizedBox(height: 8),
+                _AboutCard(
+                  bio: (professional.bio ?? '').trim(),
+                  emptyHint: 'Aún no escribió sobre su oficio.',
+                ),
+                if (phone.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _PhoneRow(
+                    display: phone,
+                    unlocked: professional.verified,
+                    busy: _openingChat,
+                    onTap: _openWhatsApp,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ProfessionalProfileScreen(
+                            state: widget.state,
+                            professional: professional,
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('Ver perfil completo'),
+                  ),
+                  FilledButton(
+                    onPressed: !canHire
+                        ? null
+                        : () => startDirectHire(
+                              context,
+                              state: widget.state,
+                              professional: professional,
+                            ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          past.isEmpty
+                              ? 'Solicitar servicio'
+                              : 'Solicitar nuevamente',
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.arrow_forward, size: 20),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProfileSkeleton extends StatelessWidget {
   const _ProfileSkeleton();
 

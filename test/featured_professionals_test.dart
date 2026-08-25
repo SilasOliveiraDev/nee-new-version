@@ -31,6 +31,7 @@ void main() {
     expect(pro.isDestaque, isTrue);
     expect(pro.categoryId, '2');
     expect(pro.hasMapPin, isTrue);
+    expect(pro.pinApproximate, isFalse);
     expect(pro.initials, 'RG');
     expect(pro.distanceKm, isNull);
     expect(pro.distanceLabel, isNull);
@@ -155,6 +156,9 @@ void main() {
     });
     expect(pro.categoryLabel, isEmpty);
     expect(pro.areaLabel, '2 anillo');
+    expect(pro.hasMapPin, isTrue);
+    expect(pro.pinApproximate, isTrue);
+    expect(pro.approximatePinLabel, contains('2 anillo'));
     expect(looksLikeAreaLabel('Plan 3000'), isTrue);
     expect(looksLikeAreaLabel('Tecnología'), isFalse);
   });
@@ -170,5 +174,18 @@ void main() {
     });
     expect(rated.ratingLabel, '⭐ 4.8 · 12');
     expect(rated.jobsLabel, '3 trabajos realizados');
+  });
+
+  test('zone without gps still gets an approximate map pin', () {
+    final pro = professionalFromUserRow({
+      'professional_id': 'map1',
+      'display_name': 'Luis',
+      'user_type': 'Servicio',
+      'Zona': 'Urubó',
+    });
+    expect(pro.hasMapPin, isTrue);
+    expect(pro.pinApproximate, isTrue);
+    expect(pro.longitude, lessThan(-63.18));
+    expect(pro.approximatePinLabel, contains('Urubó'));
   });
 }

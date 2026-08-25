@@ -3,6 +3,7 @@ import '../domain/phone_mask.dart';
 import '../mock_data.dart';
 import '../models.dart';
 import '../places/geo_match.dart';
+import '../places/scz_zone_coords.dart';
 
 ({double? lat, double? lng}) parseLatLng(dynamic raw) {
   if (raw == null) return (lat: null, lng: null);
@@ -59,7 +60,8 @@ Professional professionalFromUserRow(
       (row['display_name'] as String?)?.trim() ??
       (row['name'] as String?)?.trim() ??
       '';
-  final coords = parseLatLng(row['latlng']);
+  var coords = parseLatLng(row['latlng']);
+  var pinApproximate = false;
   final rawCategoria = (row['Categoria'] as String?)?.trim();
   final viewCategory = (row['category_name'] as String?)?.trim();
   final tradeName = _asTradeLabel(viewCategory) ?? _asTradeLabel(rawCategoria);
@@ -105,6 +107,17 @@ Professional professionalFromUserRow(
   final suspended = row['is_suspended'] == true || row['isSuspenso'] == true;
   final docs = '${row['document_status'] ?? row['statusDocumentos'] ?? ''}'
       .toUpperCase();
+  final id = '${row['professional_id'] ?? row['professional_id'] ?? row['UUID'] ?? row['id'] ?? ''}';
+  if (coords.lat == null || coords.lng == null) {
+    final hint = [
+      zone,
+      city,
+      serviceArea,
+    ].firstWhere((value) => value.trim().isNotEmpty, orElse: () => '');
+    final pin = resolveZonePin(hint, id: id);
+    coords = (lat: pin.latitude, lng: pin.longitude);
+    pinApproximate = true;
+  }
   double? distance;
   if (originLat != null &&
       originLng != null &&
@@ -126,7 +139,6 @@ Professional professionalFromUserRow(
   final jobs = (row['completed_jobs_count'] as num?)?.toInt() ??
       (row['jobs'] as num?)?.toInt() ??
       0;
-  final id = '${row['professional_id'] ?? row['professional_id'] ?? row['UUID'] ?? row['id'] ?? ''}';
   final bio = (row['bio'] as String?)?.trim() ??
       (row['descricaoSobre'] as String?)?.trim();
   final avatar = (row['avatar_url'] as String?)?.trim() ??
@@ -163,6 +175,7 @@ Professional professionalFromUserRow(
     latitude: coords.lat,
     longitude: coords.lng,
     hasMapPin: coords.lat != null && coords.lng != null,
+    pinApproximate: pinApproximate,
     isDestaque: row['is_featured'] == true || row['isDestacado'] == true,
     avatarUrl: (avatar ?? '').isEmpty ? null : avatar,
     bio: (bio ?? '').isEmpty ? null : bio,

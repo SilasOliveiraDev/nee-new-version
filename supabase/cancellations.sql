@@ -52,7 +52,7 @@ ALTER TABLE public.user_restrictions ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS nee_policy_select ON public.cancellation_policy;
 CREATE POLICY nee_policy_select ON public.cancellation_policy
-  FOR SELECT TO authenticated USING (true);
+  FOR SELECT TO anon, authenticated USING (true);
 
 DROP POLICY IF EXISTS nee_cancels_select_own ON public.service_cancellations;
 CREATE POLICY nee_cancels_select_own ON public.service_cancellations
@@ -136,14 +136,14 @@ DROP TRIGGER IF EXISTS trg_cancel_reason_policy ON public.service_cancellations;
 CREATE TRIGGER trg_cancel_reason_policy
   BEFORE INSERT ON public.service_cancellations
   FOR EACH ROW
-  EXECUTE PROCEDURE public.apply_cancellation_reason_policy();
+  EXECUTE FUNCTION public.apply_cancellation_reason_policy();
 
 DROP TRIGGER IF EXISTS trg_rapid_cancel_guard ON public.service_cancellations;
 CREATE TRIGGER trg_rapid_cancel_guard
   AFTER INSERT ON public.service_cancellations
   FOR EACH ROW
-  EXECUTE PROCEDURE public.apply_rapid_cancel_guard();
+  EXECUTE FUNCTION public.apply_rapid_cancel_guard();
 
-GRANT SELECT ON public.cancellation_policy TO authenticated;
+GRANT SELECT ON public.cancellation_policy TO anon, authenticated;
 GRANT SELECT, INSERT ON public.service_cancellations TO authenticated;
 GRANT SELECT ON public.user_restrictions TO authenticated;

@@ -74,7 +74,21 @@ class _StatusScreenState extends State<StatusScreen> {
                 ),
               ],
               const SizedBox(height: 6),
-              Text(request.description, style: const TextStyle(height: 1.35)),
+              Text(
+                request.description,
+                style: const TextStyle(height: 1.35),
+              ),
+              if (request.isDirect) ...[
+                const SizedBox(height: 10),
+                const Text(
+                  'El pago lo haces directo al profesional, no dentro de Ñee.',
+                  style: TextStyle(
+                    color: NeeColors.muted,
+                    fontWeight: FontWeight.w700,
+                    height: 1.35,
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               Text(
                 [

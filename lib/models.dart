@@ -470,6 +470,7 @@ class UserAccount {
   bool phoneVerified = false;
   bool emailVerified = false;
   Uint8List? photoBytes;
+  String? photoPath;
   final currentLocation = GeoAddress();
   final registeredAddress = GeoAddress();
   final roles = <AppRole>{};

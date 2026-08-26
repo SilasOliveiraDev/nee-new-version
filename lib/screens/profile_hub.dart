@@ -312,11 +312,7 @@ class _ProfileDataScreenState extends State<ProfileDataScreen> {
     );
     if (action == null || !mounted) return;
     if (action == 'delete') {
-      widget.state.user.photoBytes = null;
-      widget.state.user.photoUrl = null;
-      final id = widget.state.user.supabaseUuid;
-      if (id != null) await AccountRepository.clearAvatar(id);
-      widget.state.notifyAndSave();
+      await widget.state.clearProfilePhoto();
       return;
     }
     final source = action == 'camera' ? ImageSource.camera : ImageSource.gallery;
@@ -337,13 +333,17 @@ class _ProfileDataScreenState extends State<ProfileDataScreen> {
       return;
     }
     widget.state.user.photoBytes = bytes;
-    final id = widget.state.user.supabaseUuid ?? widget.state.customerId;
-    if (id != 'local-customer') {
-      await AccountRepository.uploadAvatar(id, bytes);
-    }
-    widget.state.notifyAndSave();
+    final ok = await widget.state.saveProfilePhoto(bytes);
     unawaited(widget.state.completeChallenge('foto_perfil'));
     if (!mounted) return;
+    if (!ok) {
+      await showErrorSheet(
+        context,
+        title: 'No se guardó en la cuenta',
+        body: 'La foto quedó en este teléfono. Inténtalo de nuevo con conexión.',
+      );
+      return;
+    }
     await showSuccessSheet(
       context,
       title: 'Foto guardada ✓',
@@ -363,6 +363,7 @@ class _ProfileDataScreenState extends State<ProfileDataScreen> {
           Center(
             child: PhotoCircleButton(
               bytes: user.photoBytes,
+              url: user.photoUrl,
               initials: user.initials,
               onTap: _photo,
             ),

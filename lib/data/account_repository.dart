@@ -77,24 +77,37 @@ class AccountRepository {
     }
   }
 
+  static String storagePathFor(String userId) => '$userId/profile.jpg';
+
+  static Future<String?> signedAvatarUrl(String? stored) async {
+    if (stored == null || stored.trim().isEmpty) return null;
+    if (stored.startsWith('http')) return stored;
+    if (!NeeSupabase.ready) return null;
+    try {
+      return await NeeSupabase.client.storage
+          .from('avatars')
+          .createSignedUrl(stored.trim(), 60 * 60 * 24 * 7);
+    } catch (error) {
+      debugPrint('Ñee: avatar url: $error');
+      return null;
+    }
+  }
+
   static Future<String?> uploadAvatar(String userId, Uint8List bytes) async {
     if (!NeeSupabase.ready) return null;
     if (bytes.length > 5 * 1024 * 1024) return null;
     try {
-      final path = '$userId/profile.jpg';
+      final path = storagePathFor(userId);
       await NeeSupabase.client.storage.from('avatars').uploadBinary(
             path,
             bytes,
             fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
           );
-      final signed = await NeeSupabase.client.storage
-          .from('avatars')
-          .createSignedUrl(path, 60 * 60 * 24 * 7);
       await NeeSupabase.client
           .from('users')
           .update({'imagemPerfil': path})
           .eq('UUID', userId);
-      return signed;
+      return await signedAvatarUrl(path);
     } catch (error) {
       debugPrint('Ñee: avatar: $error');
       return null;

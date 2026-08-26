@@ -910,9 +910,18 @@ class _ProfileStepState extends State<_ProfileStep> {
   }
 }
 
-class _PhotoStep extends StatelessWidget {
+class _PhotoStep extends StatefulWidget {
   const _PhotoStep({required this.state});
   final NeeAppState state;
+
+  @override
+  State<_PhotoStep> createState() => _PhotoStepState();
+}
+
+class _PhotoStepState extends State<_PhotoStep> {
+  var saving = false;
+
+  NeeAppState get state => widget.state;
 
   @override
   Widget build(BuildContext context) {
@@ -927,31 +936,42 @@ class _PhotoStep extends StatelessWidget {
         Center(
           child: PhotoCircleButton(
             bytes: state.user.photoBytes,
+            url: state.user.photoUrl,
             initials: state.user.initials,
-            onTap: () => _pick(ImageSource.gallery),
+            onTap: saving ? () {} : () => _pick(ImageSource.gallery),
           ),
         ),
         const SizedBox(height: 16),
         OutlinedButton(
-          onPressed: () => _pick(ImageSource.camera),
+          onPressed: saving ? null : () => _pick(ImageSource.camera),
           child: const Text('Tomar foto'),
         ),
         const SizedBox(height: 8),
         OutlinedButton(
-          onPressed: () => _pick(ImageSource.gallery),
+          onPressed: saving ? null : () => _pick(ImageSource.gallery),
           child: const Text('Elegir de la galería'),
         ),
         const SizedBox(height: 20),
         FilledButton(
-          onPressed: () => state.goTo(OnboardingStep.customerPrefs),
-          child: const Text('Continuar'),
+          onPressed: saving ? null : _continue,
+          child: Text(saving ? 'Guardando…' : 'Continuar'),
         ),
         TextButton(
-          onPressed: () => state.goTo(OnboardingStep.customerPrefs),
+          onPressed: saving
+              ? null
+              : () => state.goTo(OnboardingStep.customerPrefs),
           child: const Text('Omitir por ahora'),
         ),
       ],
     );
+  }
+
+  Future<void> _continue() async {
+    setState(() => saving = true);
+    await state.flushPendingAvatar();
+    if (!mounted) return;
+    setState(() => saving = false);
+    state.goTo(OnboardingStep.customerPrefs);
   }
 
   Future<void> _pick(ImageSource source) async {
@@ -961,8 +981,11 @@ class _PhotoStep extends StatelessWidget {
       imageQuality: 85,
     );
     if (file == null) return;
-    state.user.photoBytes = await file.readAsBytes();
-    state.notifyAndSave();
+    final bytes = await file.readAsBytes();
+    setState(() => saving = true);
+    await state.saveProfilePhoto(bytes);
+    if (!mounted) return;
+    setState(() => saving = false);
   }
 }
 

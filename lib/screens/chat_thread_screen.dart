@@ -204,8 +204,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                     final visible = messages
                         .where(
                           (m) => m.visibleFor(
-                            asProfessional:
-                                state.activeRole == AppRole.provider,
+                            asProfessional: false,
                           ),
                         )
                         .toList();

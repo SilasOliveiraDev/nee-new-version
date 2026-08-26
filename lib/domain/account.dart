@@ -102,7 +102,7 @@ const fallbackFaqs = [
     category: 'Pagos',
     question: '¿Puedo pagar dentro de Ñee?',
     answer:
-        'Por ahora coordinas el pago con el profesional. El pago dentro de Ñee llegará más adelante.',
+        'No. Acuerdas el precio en Ñee y pagas directo al profesional (efectivo o transferencia). Ñee no cobra ni procesa el pago.',
   ),
   FaqItem(
     category: 'Cancelaciones',

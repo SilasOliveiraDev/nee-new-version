@@ -8,6 +8,13 @@ void main() {
     expect(const PasswordStrength('clave123').ok, isTrue);
   });
 
+  test('direct pay copy does not promise in-app checkout', () {
+    final pagos = fallbackFaqs.where((f) => f.category == 'Pagos').toList();
+    expect(pagos, isNotEmpty);
+    expect(pagos.first.answer.toLowerCase(), contains('directo al profesional'));
+    expect(pagos.first.answer.toLowerCase(), isNot(contains('llegará más adelante')));
+  });
+
   test('client notification prefs do not include new requests', () {
     final prefs = NotificationPrefs();
     expect(prefs.newOffers, isTrue);

@@ -362,14 +362,17 @@ class PhotoCircleButton extends StatelessWidget {
     required this.bytes,
     required this.initials,
     required this.onTap,
+    this.url,
   });
 
   final Uint8List? bytes;
+  final String? url;
   final String initials;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final network = bytes == null && url != null && url!.startsWith('http');
     return GestureDetector(
       onTap: onTap,
       child: Stack(
@@ -378,8 +381,10 @@ class PhotoCircleButton extends StatelessWidget {
           CircleAvatar(
             radius: 56,
             backgroundColor: NeeColors.yellow,
-            backgroundImage: bytes == null ? null : MemoryImage(bytes!),
-            child: bytes == null
+            backgroundImage: bytes != null
+                ? MemoryImage(bytes!)
+                : (network ? NetworkImage(url!) : null),
+            child: bytes == null && !network
                 ? Text(
                     initials,
                     style: const TextStyle(

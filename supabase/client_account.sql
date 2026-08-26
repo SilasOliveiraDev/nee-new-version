@@ -102,7 +102,7 @@ FROM (VALUES
   ('Solicitudes', '¿Cómo cancelo una solicitud?', 'Abre la solicitud y elige Cancelar. Te pediremos un motivo. La solicitud queda en tu historial, no se elimina.', 1),
   ('Solicitudes', '¿Hablar con un profesional significa contratarlo?', 'No. Puedes preguntar sobre una propuesta. La relación oficial empieza cuando confirmas al profesional.', 2),
   ('Profesionales', '¿Cómo elijo a un profesional?', 'Revisa perfil, calificación y propuesta. Luego confirma. Los demás quedan notificados de forma respetuosa.', 1),
-  ('Pagos', '¿Puedo pagar dentro de Ñee?', 'Por ahora coordinas el pago con el profesional. El pago dentro de Ñee llegará más adelante.', 1),
+  ('Pagos', '¿Puedo pagar dentro de Ñee?', 'No. Acuerdas el precio en Ñee y pagas directo al profesional (efectivo o transferencia). Ñee no cobra ni procesa el pago.', 1),
   ('Cancelaciones', '¿Qué pasa si cancelo varias veces?', 'Para proteger a los profesionales, varios cancelamentos seguidos pueden pausar nuevas solicitudes por unos minutos.', 1),
   ('Seguridad', '¿Debo compartir mi WhatsApp?', 'No. Coordina el servicio en el chat de Ñee. Así protegemos tu número y el del profesional.', 1),
   ('Cuenta', '¿Cómo cambio mi contraseña?', 'Ve a Perfil → Seguridad → Cambiar contraseña. Si la olvidaste, usa ¿Olvidaste tu contraseña? en el inicio de sesión.', 1),

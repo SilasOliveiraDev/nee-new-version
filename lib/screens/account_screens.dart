@@ -416,7 +416,7 @@ class AboutNeeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Publicas lo que necesitas, recibes propuestas de gente cerca y eliges con quién trabajar. Conversar no es contratar: la relación oficial empieza cuando confirmas al profesional.',
+            'Publicas lo que necesitas, recibes propuestas de gente cerca y eliges con quién trabajar. Conversar no es contratar: la relación oficial empieza cuando confirmas al profesional. El pago lo haces directo al profesional, no dentro de Ñee.',
             style: TextStyle(height: 1.45, color: NeeColors.muted),
           ),
           const SizedBox(height: 24),

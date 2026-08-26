@@ -133,6 +133,9 @@ class NeeAppState extends ChangeNotifier {
 
   Future<void> _refreshRemote() async {
     await NeeRepository.refreshCancellationContext(this);
+    final own = await NeeRepository.fetchOwnUser();
+    if (own != null) applyUserRow(own);
+    await hydrateAvatar();
     await NeeRepository.loadAddresses(this);
     await NeeRepository.loadFeaturedProfessionals(this);
     await HireRepository.applyStatuses(directory);
@@ -505,9 +508,9 @@ class NeeAppState extends ChangeNotifier {
       ..sexo = row['sexo'] as String? ?? user.sexo
       ..phoneVerified = row['verified'] as bool? ?? user.phoneVerified
       ..supabaseUuid = row['UUID'] as String? ?? user.supabaseUuid
-      ..photoUrl = (row['imagemPerfil'] as String?)?.trim().isNotEmpty == true
+      ..photoPath = (row['imagemPerfil'] as String?)?.trim().isNotEmpty == true
           ? row['imagemPerfil'] as String
-          : user.photoUrl;
+          : user.photoPath;
     final type = '${row['user_type'] ?? ''}';
     user.roles.add(AppRole.customer);
     if (isProviderType(type) || type.toLowerCase() == 'admin') {
@@ -554,6 +557,7 @@ class NeeAppState extends ChangeNotifier {
     final done =
         row != null &&
         ((row['step'] as String?) == 'done' || user.firstName.isNotEmpty);
+    await hydrateAvatar();
     if (done) {
       finishLogin();
       return;
@@ -573,6 +577,7 @@ class NeeAppState extends ChangeNotifier {
     persist();
     unawaited(NeeRepository.upsertRegisteredAddress(this));
     unawaited(() async {
+      await flushPendingAvatar();
       await NeeRepository.loadFeaturedProfessionals(this);
       await NeeRepository.loadClientRequests(this);
       notifyListeners();
@@ -580,12 +585,58 @@ class NeeAppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void publishProvider() {
-    user.roles.add(AppRole.provider);
-    user.provider.published = true;
-    user.provider.verificationLevel = VerificationLevel.basic;
-    activeRole = AppRole.provider;
-    step = OnboardingStep.done;
+  Future<bool> saveProfilePhoto(Uint8List bytes) async {
+    user.photoBytes = bytes;
+    notifyListeners();
+    final id = user.supabaseUuid ?? customerId;
+    if (id == 'local-customer' || !NeeSupabase.ready) {
+      persist();
+      return true;
+    }
+    final url = await AccountRepository.uploadAvatar(id, bytes);
+    if (url == null) {
+      persist();
+      return false;
+    }
+    user.photoPath = AccountRepository.storagePathFor(id);
+    user.photoUrl = url;
+    persist();
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> flushPendingAvatar() async {
+    final bytes = user.photoBytes;
+    if (bytes == null || bytes.isEmpty) return;
+    if ((user.photoPath ?? '').isNotEmpty &&
+        (user.photoUrl ?? '').startsWith('http')) {
+      return;
+    }
+    await saveProfilePhoto(bytes);
+  }
+
+  Future<void> hydrateAvatar() async {
+    var path = user.photoPath?.trim();
+    if (path != null && path.startsWith('http')) path = null;
+    final fallback = user.photoUrl?.trim();
+    if ((path == null || path.isEmpty) &&
+        fallback != null &&
+        fallback.isNotEmpty &&
+        !fallback.startsWith('http')) {
+      path = fallback;
+    }
+    if (path == null || path.isEmpty) return;
+    user.photoPath = path;
+    final url = await AccountRepository.signedAvatarUrl(path);
+    if (url != null) user.photoUrl = url;
+  }
+
+  Future<void> clearProfilePhoto() async {
+    user.photoBytes = null;
+    user.photoUrl = null;
+    user.photoPath = null;
+    final id = user.supabaseUuid;
+    if (id != null) await AccountRepository.clearAvatar(id);
     persist();
     notifyListeners();
   }
@@ -1414,6 +1465,8 @@ class NeeAppState extends ChangeNotifier {
       'commercial': user.provider.commercial,
       'supabaseUuid': user.supabaseUuid,
       'supabaseRowId': user.supabaseRowId,
+      'photoPath': user.photoPath,
+      'photoUrl': user.photoUrl,
       'places': places.map((e) => e.toJson()).toList(),
       'restrictionExpires': createBlock?.expiresAt.toIso8601String(),
       'policyWindow': cancellationPolicy.windowMinutes,
@@ -1446,7 +1499,9 @@ class NeeAppState extends ChangeNotifier {
       ..sexo = json['sexo'] as String? ?? ''
       ..phoneVerified = json['phoneVerified'] as bool? ?? false
       ..supabaseUuid = json['supabaseUuid'] as String?
-      ..supabaseRowId = json['supabaseRowId'] as int?;
+      ..supabaseRowId = json['supabaseRowId'] as int?
+      ..photoPath = json['photoPath'] as String?
+      ..photoUrl = json['photoUrl'] as String?;
     final birth = json['birthDate'] as String?;
     if (birth != null) user.birthDate = DateTime.tryParse(birth);
     user.roles

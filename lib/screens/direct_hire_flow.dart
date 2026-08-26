@@ -545,7 +545,7 @@ class DirectHireSentScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Estamos esperando su respuesta. Te avisaremos cuando responda.',
+              'Estamos esperando su respuesta. Te avisaremos cuando responda. El pago, cuando acuerden el precio, lo haces directo al profesional.',
               style: TextStyle(color: NeeColors.muted, height: 1.4),
             ),
             const SizedBox(height: 18),

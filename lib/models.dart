@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import 'domain/availability.dart';
+import 'domain/review_criteria.dart';
 import 'places/place_models.dart';
 import 'service_schedule.dart';
 
@@ -130,6 +131,7 @@ class Professional {
     this.serviceArea,
     this.phoneMasked,
     this.hasReportedAvailability = false,
+    this.criteria = const CriteriaAverages(),
   });
 
   final String id;
@@ -162,6 +164,7 @@ class Professional {
   final String? serviceArea;
   final String? phoneMasked;
   final bool hasReportedAvailability;
+  final CriteriaAverages criteria;
 
   bool get isNewProfessional => ratingCount == 0 && rating <= 0 && jobs <= 0;
 
@@ -258,6 +261,43 @@ class Professional {
       serviceArea: serviceArea,
       phoneMasked: phoneMasked,
       hasReportedAvailability: true,
+      criteria: criteria,
+    );
+  }
+
+  Professional withAvatarUrl(String? url) {
+    return Professional(
+      id: id,
+      name: name,
+      specialty: specialty,
+      categoryId: categoryId,
+      city: city,
+      initials: initials,
+      rating: rating,
+      ratingCount: ratingCount,
+      jobs: jobs,
+      distanceKm: distanceKm,
+      available: available,
+      isActive: isActive,
+      documentsVerified: documentsVerified,
+      verified: verified,
+      latitude: latitude,
+      longitude: longitude,
+      hasMapPin: hasMapPin,
+      pinApproximate: pinApproximate,
+      isDestaque: isDestaque,
+      isProvider: isProvider,
+      tags: tags,
+      opsStatus: opsStatus,
+      nextAvailableAt: nextAvailableAt,
+      acceptingRequests: acceptingRequests,
+      avatarUrl: url,
+      bio: bio,
+      categoryName: categoryName,
+      serviceArea: serviceArea,
+      phoneMasked: phoneMasked,
+      hasReportedAvailability: hasReportedAvailability,
+      criteria: criteria,
     );
   }
 
@@ -333,8 +373,17 @@ class ServiceRequest {
 
   bool get isDirect => kind == RequestKind.direct;
 
+  bool get canConfirmDirect =>
+      isDirect &&
+      (directStatus == DirectStatus.negotiation ||
+          directStatus == DirectStatus.pendingConfirmation);
+
   String get stageLabel {
     if (isDirect) {
+      if (status == RequestStatus.cancelledByProfessional ||
+          directStatus == DirectStatus.declined) {
+        return 'No puede atender';
+      }
       switch (directStatus) {
         case DirectStatus.pending:
           return 'Esperando respuesta';
@@ -345,7 +394,7 @@ class ServiceRequest {
         case DirectStatus.confirmed:
           break;
         case DirectStatus.declined:
-          return 'No puede atender';
+          break;
         case DirectStatus.expired:
           return 'Sin respuesta a tiempo';
         case DirectStatus.cancelled:
@@ -437,6 +486,18 @@ class GeoAddress {
   }
 
   bool get isFilled => city.trim().isNotEmpty || street.trim().isNotEmpty;
+
+  void clear() {
+    latitude = null;
+    longitude = null;
+    country = 'Bolivia';
+    department = '';
+    city = '';
+    zone = '';
+    street = '';
+    number = '';
+    reference = '';
+  }
 }
 
 class ProviderProfile {
@@ -510,6 +571,30 @@ class UserAccount {
     if (parts.isEmpty || parts.first.isEmpty) return 'Ñ';
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return (parts.first[0] + parts.last[0]).toUpperCase();
+  }
+
+  void clearLocal() {
+    firstName = '';
+    lastName = '';
+    phone = '';
+    email = '';
+    sexo = '';
+    birthDate = null;
+    phoneVerified = false;
+    emailVerified = false;
+    photoBytes = null;
+    photoPath = null;
+    photoUrl = null;
+    supabaseUuid = null;
+    supabaseRowId = null;
+    roles.clear();
+    preferredCategories.clear();
+    portfolio.clear();
+    currentLocation.clear();
+    registeredAddress.clear();
+    provider.title = '';
+    provider.bio = '';
+    provider.specialties.clear();
   }
 }
 

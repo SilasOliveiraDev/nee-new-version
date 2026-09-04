@@ -142,18 +142,40 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  uid text := auth.uid()::text;
+  uid uuid := auth.uid();
 BEGIN
   IF uid IS NULL THEN
     RAISE EXCEPTION 'not_authenticated';
   END IF;
+
   UPDATE public.users
   SET "isDeletado" = true,
       email = NULL,
       phone = NULL,
       name = 'Cuenta eliminada',
       "imagemPerfil" = NULL
-  WHERE "UUID"::text = uid;
+  WHERE "UUID" = uid;
+
+  UPDATE auth.users
+  SET email = uid::text || '@deleted.invalid',
+      phone = NULL,
+      banned_until = 'infinity'::timestamptz,
+      deleted_at = now(),
+      encrypted_password = extensions.crypt(
+        gen_random_uuid()::text,
+        extensions.gen_salt('bf')
+      )
+  WHERE id = uid;
+
+  UPDATE auth.identities
+  SET email = uid::text || '@deleted.invalid',
+      identity_data = coalesce(identity_data, '{}'::jsonb)
+        || jsonb_build_object('email', uid::text || '@deleted.invalid')
+  WHERE user_id = uid;
+
+  DELETE FROM auth.sessions WHERE user_id = uid;
+  DELETE FROM auth.refresh_tokens WHERE user_id = uid::text;
+
   RETURN jsonb_build_object('ok', true);
 END;
 $$;

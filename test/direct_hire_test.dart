@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nee/data/nee_repository.dart';
 import 'package:nee/domain/availability.dart';
 import 'package:nee/domain/chat.dart';
 import 'package:nee/models.dart';
@@ -117,6 +118,22 @@ void main() {
     expect(request.isDirect, isTrue);
     expect(request.stageLabel, 'Esperando respuesta');
     expect(request.status, isNot(RequestStatus.professionalFound));
+  });
+
+  test('remote negotiation row keeps conversando on the client request', () {
+    final request = NeeRepository.requestFromRow({
+      'id': 206,
+      'request_kind': 'DIRECT',
+      'direct_status': 'NEGOTIATION',
+      'status': 'Conversando',
+      'description': 'estoy precisando pintar las paredes',
+      'target_professional_id': 'pro-1',
+    });
+    expect(request.isDirect, isTrue);
+    expect(request.directStatus, DirectStatus.negotiation);
+    expect(request.canConfirmDirect, isTrue);
+    expect(request.stageLabel, 'Conversando');
+    expect(request.targetProfessionalId, 'pro-1');
   });
 
   test('busy availability hides asap window', () {

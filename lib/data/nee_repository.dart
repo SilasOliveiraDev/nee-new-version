@@ -48,6 +48,11 @@ class NeeRepository {
         email: email,
         password: password,
       );
+      final own = await fetchOwnUser(includeDeleted: true);
+      if (UsersRow.isDeleted(own)) {
+        await signOut();
+        return 'Esta cuenta fue eliminada.';
+      }
       return null;
     } on AuthException catch (error) {
       return error.message;
@@ -82,9 +87,10 @@ class NeeRepository {
       payload['UUID'] = uuid;
       final existing = await NeeSupabase.client
           .from('users')
-          .select('id')
+          .select('id, isDeletado')
           .eq('UUID', uuid)
           .maybeSingle();
+      if (UsersRow.isDeleted(existing)) return;
       Map<String, dynamic>? row;
       if (existing != null) {
         row = await NeeSupabase.client
@@ -108,16 +114,20 @@ class NeeRepository {
     }
   }
 
-  static Future<Map<String, dynamic>?> fetchOwnUser() async {
+  static Future<Map<String, dynamic>?> fetchOwnUser({
+    bool includeDeleted = false,
+  }) async {
     if (!NeeSupabase.ready) return null;
     final uuid = sessionUserId;
     if (uuid == null) return null;
     try {
-      return await NeeSupabase.client
+      final row = await NeeSupabase.client
           .from('users')
           .select()
           .eq('UUID', uuid)
           .maybeSingle();
+      if (!includeDeleted && UsersRow.isDeleted(row)) return null;
+      return row;
     } catch (error) {
       debugPrint('Ñee: falha ao ler users: $error');
       return null;
@@ -502,6 +512,8 @@ class NeeRepository {
       final professionalIds = {
         for (final row in proposalRows)
           '${Map<String, dynamic>.from(row)['professional_id'] ?? ''}',
+        for (final raw in requestRows)
+          for (final id in _professionalIdsOf(Map<String, dynamic>.from(raw))) id,
       }..removeWhere((id) => id.isEmpty);
       await _ensureProfessionals(state, professionalIds);
       final loaded = <ServiceRequest>[];
@@ -529,16 +541,48 @@ class NeeRepository {
             ),
           );
         }
+        final ids = _professionalIdsOf(row);
+        final attachedId = request.targetProfessionalId ??
+            request.professional?.id ??
+            (ids.isEmpty ? null : ids.first);
+        if (attachedId != null && attachedId.isNotEmpty) {
+          request.targetProfessionalId = attachedId;
+          request.professional ??= _findProfessional(state, attachedId);
+        }
         loaded.add(request);
       }
       if (loaded.isEmpty) {
         state.requests.removeWhere((r) => r.id.startsWith('demo'));
         return;
       }
-      state.requests.removeWhere(
-        (r) => r.id.startsWith('demo') || r.remoteId != null,
-      );
-      state.requests.insertAll(0, loaded);
+      final next = <ServiceRequest>[];
+      for (final incoming in loaded) {
+        ServiceRequest? existing;
+        for (final item in state.requests) {
+          if (item.remoteId != null && item.remoteId == incoming.remoteId) {
+            existing = item;
+            break;
+          }
+          if (item.id == incoming.id) {
+            existing = item;
+            break;
+          }
+        }
+        if (existing != null) {
+          state.overlayRequest(existing, incoming);
+          next.add(existing);
+        } else {
+          next.add(incoming);
+        }
+      }
+      final localOnly = [
+        for (final item in state.requests)
+          if (item.remoteId == null && !item.id.startsWith('demo')) item,
+      ];
+      state.requests
+        ..clear()
+        ..addAll(next)
+        ..addAll(localOnly);
     } catch (error) {
       debugPrint('Ñee: falha ao ler solicitudes/propostas: $error');
     }
@@ -589,6 +633,18 @@ class NeeRepository {
     final kind = '${row['request_kind'] ?? ''}'.toUpperCase() == 'DIRECT'
         ? RequestKind.direct
         : RequestKind.marketplace;
+    var direct = directStatusFromApi(row['direct_status'] as String?);
+    var status = _statusFrom(row['status'] as String?, hasOffers: hasOffers);
+    if (direct == DirectStatus.declined ||
+        (kind == RequestKind.direct &&
+            status == RequestStatus.cancelledByProfessional)) {
+      direct = DirectStatus.declined;
+      status = RequestStatus.cancelledByProfessional;
+    }
+    if (direct == DirectStatus.confirmed &&
+        status.index < RequestStatus.accepted.index) {
+      status = RequestStatus.accepted;
+    }
     return ServiceRequest(
       id: remoteId == null ? '${row['id']}' : 'sr$remoteId',
       category: category,
@@ -600,12 +656,15 @@ class NeeRepository {
           row['city'] as String? ??
           '',
       createdAt: created,
-      status: _statusFrom(row['status'] as String?, hasOffers: hasOffers),
+      status: status,
       specialty: row['title'] as String? ?? '',
+      serviceLocation: _locationFrom(row),
       remoteId: remoteId,
       kind: kind,
-      directStatus: directStatusFromApi(row['direct_status'] as String?),
-      targetProfessionalId: row['target_professional_id'] as String?,
+      directStatus: direct,
+      targetProfessionalId: _professionalIdsOf(row).isEmpty
+          ? null
+          : _professionalIdsOf(row).first,
       requestedStart: DateTime.tryParse('${row['requested_start'] ?? ''}'),
       requestedEnd: DateTime.tryParse('${row['requested_end'] ?? ''}'),
       agreedPrice: (row['agreed_price'] as num?)?.toDouble(),
@@ -624,11 +683,17 @@ class NeeRepository {
 
   static RequestStatus _statusFrom(String? raw, {required bool hasOffers}) {
     final text = (raw ?? '').toLowerCase();
-    if (text.contains('final') || text.contains('complet')) {
+    if (text.contains('calific')) return RequestStatus.awaitingRating;
+    if (text.contains('finalizado') ||
+        text.contains('completado') ||
+        (text.contains('complet') && !text.contains('confirm'))) {
       return RequestStatus.completed;
     }
     if (text.contains('expir')) return RequestStatus.cancelledByProfessional;
-    if (text.contains('cancelado por el profesional')) {
+    if (text.contains('declin') ||
+        text.contains('rechaz') ||
+        text.contains('no puede') ||
+        text.contains('cancelado por el profesional')) {
       return RequestStatus.cancelledByProfessional;
     }
     if (text.contains('cancel')) return RequestStatus.cancelledByCustomer;
@@ -642,5 +707,103 @@ class NeeRepository {
     }
     if (hasOffers) return RequestStatus.professionalFound;
     return RequestStatus.sent;
+  }
+
+  static ServiceLocationSnapshot? _locationFrom(Map<String, dynamic> row) {
+    final parsed = parseLatLng(row['coordenadas']);
+    final latitude =
+        (row['service_latitude'] as num?)?.toDouble() ?? parsed.lat;
+    final longitude =
+        (row['service_longitude'] as num?)?.toDouble() ?? parsed.lng;
+    final formatted = (row['service_formatted_address'] as String?)?.trim() ??
+        (row['address'] as String?)?.trim() ??
+        '';
+    final neighborhood = (row['service_neighborhood'] as String?)?.trim() ?? '';
+    final city = (row['service_city'] as String?)?.trim() ??
+        (row['city'] as String?)?.trim() ??
+        '';
+    if (latitude == null &&
+        longitude == null &&
+        formatted.isEmpty &&
+        city.isEmpty) {
+      return null;
+    }
+    return ServiceLocationSnapshot(
+      placeId: row['service_address_id'] as String? ??
+          row['location_id'] as String?,
+      label: row['service_address_label'] as String? ?? '',
+      formattedAddress: formatted,
+      street: row['service_street'] as String? ?? '',
+      number: row['service_number'] as String? ?? '',
+      neighborhood: neighborhood,
+      city: city,
+      state: row['service_state'] as String? ?? row['state'] as String? ?? '',
+      country: row['service_country'] as String? ??
+          row['country'] as String? ??
+          'Bolivia',
+      postalCode: row['service_postal_code'] as String? ?? '',
+      latitude: latitude,
+      longitude: longitude,
+      apartment: row['service_apartment'] as String? ?? '',
+      floor: row['service_floor'] as String? ?? '',
+      reference: row['service_reference'] as String? ?? '',
+    );
+  }
+
+  static List<String> _professionalIdsOf(Map<String, dynamic> row) {
+    return [
+      for (final key in [
+        'target_professional_id',
+        'profissional_id',
+        'selected_professional_id',
+      ])
+        if ('${row[key] ?? ''}'.trim().isNotEmpty) '${row[key]}'.trim(),
+    ];
+  }
+
+  static RealtimeChannel? _requestsLive;
+
+  static void subscribeClientRequests({
+    required String clientId,
+    required void Function(Map<String, dynamic> row) onChange,
+  }) {
+    if (!NeeSupabase.ready || clientId.isEmpty || clientId == 'local-customer') {
+      return;
+    }
+    unsubscribeClientRequests();
+    _requestsLive = NeeSupabase.client
+        .channel('client-service-requests-$clientId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'service_requests',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'client_id',
+            value: clientId,
+          ),
+          callback: (payload) {
+            onChange(Map<String, dynamic>.from(payload.newRecord));
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'service_requests',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'client_id',
+            value: clientId,
+          ),
+          callback: (payload) {
+            onChange(Map<String, dynamic>.from(payload.newRecord));
+          },
+        )
+        .subscribe();
+  }
+
+  static Future<void> unsubscribeClientRequests() async {
+    await _requestsLive?.unsubscribe();
+    _requestsLive = null;
   }
 }

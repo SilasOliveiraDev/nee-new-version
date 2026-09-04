@@ -57,3 +57,7 @@ BEGIN
   );
 END;
 $function$;
+
+GRANT EXECUTE ON FUNCTION public.professional_public_status(text) TO anon, authenticated;
+GRANT SELECT ON public.professional_public_profiles TO anon, authenticated;
+

@@ -60,7 +60,7 @@ class ServiceConversation {
       case ConversationStatus.active:
         switch (mode) {
           case ConversationMode.preHire:
-            return 'Sobre una propuesta';
+            return 'Chat abierto';
           case ConversationMode.negotiation:
             return 'Negociación';
           case ConversationMode.activeService:
@@ -113,8 +113,18 @@ class ChatMessage {
     return true;
   }
 
-  bool get isMine => senderType == ChatSender.customer;
   bool get isSystem => senderType == ChatSender.system || type == ChatMessageType.system;
+
+  bool mineAsCustomer(String myId) {
+    if (isSystem) return false;
+    if (senderType == ChatSender.professional) return false;
+    if (senderId != null && senderId!.trim().isNotEmpty) {
+      return senderId == myId;
+    }
+    return senderType == ChatSender.customer;
+  }
+
+  bool get isMine => senderType == ChatSender.customer;
 }
 
 bool looksLikeOffPlatformContact(String text) {
@@ -152,8 +162,12 @@ String systemTitle(String? event) {
       return 'Profesional seleccionado';
     case 'PROPOSAL_ACCEPTED':
       return '¡Tu propuesta fue aceptada! 🎉';
+    case 'DIRECT_REQUEST_SENT':
+      return 'Solicitud enviada';
     case 'DIRECT_REQUEST_ACCEPTED':
       return 'Solicitud aceptada';
+    case 'DIRECT_DECLINED':
+      return 'No puede atender';
     case 'NEGOTIATION_STARTED':
       return 'Negociación';
     case 'FINAL_PROPOSAL_SENT':
@@ -242,8 +256,11 @@ String apiMode(ConversationMode mode) {
 }
 
 ChatSender senderFromApi(String? raw) {
-  switch (raw) {
+  switch ((raw ?? '').trim().toUpperCase()) {
     case 'PROFESSIONAL':
+    case 'PROVIDER':
+    case 'PRO':
+    case 'PROFESIONAL':
       return ChatSender.professional;
     case 'SYSTEM':
       return ChatSender.system;
@@ -263,8 +280,9 @@ ChatMessageType typeFromApi(String? raw) {
   }
 }
 
-DeliveryStatus deliveryFromApi(String? raw) {
-  switch (raw) {
+DeliveryStatus deliveryFromApi(String? raw, {DateTime? readAt}) {
+  if (readAt != null) return DeliveryStatus.read;
+  switch ((raw ?? '').toUpperCase()) {
     case 'SENDING':
       return DeliveryStatus.sending;
     case 'DELIVERED':
@@ -284,8 +302,12 @@ String systemCopy(String? event, {String name = 'El profesional'}) {
       return 'Has elegido a $name para realizar el servicio.';
     case 'PROPOSAL_ACCEPTED':
       return 'El cliente aceptó tu propuesta. Ya pueden coordinar el servicio en este chat.';
+    case 'DIRECT_REQUEST_SENT':
+      return 'El profesional recibió tu solicitud. Puedes agregar detalles aquí mientras esperas su respuesta.';
     case 'DIRECT_REQUEST_ACCEPTED':
       return '$name aceptó tu solicitud. Ahora pueden coordinar los detalles.';
+    case 'DIRECT_DECLINED':
+      return '$name no puede atender esta solicitud.';
     case 'FINAL_PROPOSAL_SENT':
       return '$name está listo para confirmar el servicio.';
     case 'CONVERSATION_CLOSED':

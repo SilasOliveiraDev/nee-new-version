@@ -51,6 +51,7 @@ select
     where r.profissional_id = u."UUID"::text
       and coalesce(r.is_visible, true)
       and r.rating is not null
+      and coalesce(r.author_role, 'CUSTOMER') = 'CUSTOMER'
   ) as reviews_average,
   coalesce(u."rateAvaliacao", 0) as stored_rating,
   (
@@ -59,6 +60,7 @@ select
     where r.profissional_id = u."UUID"::text
       and coalesce(r.is_visible, true)
       and r.rating is not null
+      and coalesce(r.author_role, 'CUSTOMER') = 'CUSTOMER'
   ) as rating_count,
   (
     select count(*)::int
@@ -85,7 +87,42 @@ select
         ''
       ) as local
     ) s
-  ) as phone_masked
+  ) as phone_masked,
+  (
+    select avg(r.rating_quality)
+    from public.reviews r
+    where r.profissional_id = u."UUID"::text
+      and coalesce(r.is_visible, true)
+      and r.rating_quality is not null
+  ) as reviews_quality_average,
+  (
+    select avg(r.rating_conduct)
+    from public.reviews r
+    where r.profissional_id = u."UUID"::text
+      and coalesce(r.is_visible, true)
+      and r.rating_conduct is not null
+  ) as reviews_conduct_average,
+  (
+    select avg(r.rating_ethics)
+    from public.reviews r
+    where r.profissional_id = u."UUID"::text
+      and coalesce(r.is_visible, true)
+      and r.rating_ethics is not null
+  ) as reviews_ethics_average,
+  (
+    select avg(r.rating_courtesy)
+    from public.reviews r
+    where r.profissional_id = u."UUID"::text
+      and coalesce(r.is_visible, true)
+      and r.rating_courtesy is not null
+  ) as reviews_courtesy_average,
+  (
+    select avg(r.rating_punctuality)
+    from public.reviews r
+    where r.profissional_id = u."UUID"::text
+      and coalesce(r.is_visible, true)
+      and r.rating_punctuality is not null
+  ) as reviews_punctuality_average
 from public.users u
 left join public.categories cat_id on cat_id.id = u."categoriaId"
 where u."user_type" = 'Servicio'

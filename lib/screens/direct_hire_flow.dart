@@ -10,7 +10,10 @@ import '../service_schedule.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import '../widgets/nee_sheets.dart';
+import '../client/account_gate.dart';
+import '../domain/guest_intent.dart';
 import 'buscar_servicio_flow.dart';
+import 'chat_thread_screen.dart';
 import 'service_place_flow.dart';
 import 'status_screen.dart';
 
@@ -19,6 +22,14 @@ Future<void> startDirectHire(
   required NeeAppState state,
   required Professional professional,
 }) async {
+  if (state.isGuest) {
+    final ok = await ensureAccount(
+      context,
+      state: state,
+      intent: GuestIntent.hire(professional.id),
+    );
+    if (!ok || !context.mounted) return;
+  }
   if (state.blocksNewSolicitud && state.createBlock != null) {
     await showRestrictionSheet(
       context,
@@ -186,7 +197,7 @@ class _DirectHireFlowState extends State<DirectHireFlow> {
         ? view.nextAvailableAt!
         : start;
     try {
-      final request = widget.state.createRequest(
+    final request = await widget.state.createRequest(
         category: ServiceCategory(
           id: pro.categoryId.isEmpty ? 'direct' : pro.categoryId,
           name: categoryLine.isEmpty ? specialtyLine : categoryLine,
@@ -556,6 +567,23 @@ class DirectHireSentScreen extends StatelessWidget {
               ),
             const Spacer(),
             FilledButton(
+              onPressed: () async {
+                final professional = pro;
+                if (professional == null) return;
+                await openServiceChat(
+                  context,
+                  state: state,
+                  request: request,
+                  offer: ServiceOffer(
+                    id: 'direct',
+                    professional: professional,
+                  ),
+                );
+              },
+              child: const Text('Abrir chat'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton(
               onPressed: () {
                 Navigator.of(context).pushReplacement(
                   MaterialPageRoute(
@@ -567,9 +595,12 @@ class DirectHireSentScreen extends StatelessWidget {
               child: const Text('Ver mi solicitud'),
             ),
             const SizedBox(height: 10),
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Volver al inicio'),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+                state.goClientTab(1, history: false);
+              },
+              child: const Text('Ir a mis solicitudes'),
             ),
           ],
         ),

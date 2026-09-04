@@ -23,7 +23,20 @@ class MatchingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final id = categoryId ?? request?.category.id ?? '';
-    final matches = professionalsReadyToHelp(id, catalog: state.directory);
+    String? name = request?.category.name;
+    if (name == null || name.isEmpty) {
+      for (final category in state.catalog) {
+        if (category.id == id) {
+          name = category.name;
+          break;
+        }
+      }
+    }
+    final matches = professionalsReadyToHelp(
+      id,
+      catalog: state.directory,
+      categoryName: name,
+    );
     final ink = Theme.of(context).colorScheme.onSurface;
 
     return Scaffold(
@@ -33,14 +46,14 @@ class MatchingScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
           const NeeHeader(
-            title: 'Profesionales destacados',
+            title: 'Profesionales en este oficio',
             subtitle:
-                'Solo personas registradas en Ñee y marcadas como destacadas.',
+                'Gente de Ñee en este oficio. Elige con quién hablar o publica si nadie encaja.',
           ),
           const SizedBox(height: 18),
           if (matches.isEmpty)
             Text(
-              'Aún no hay profesionales destacados en este oficio. Publica la solicitud y avisamos cuando alguien se sintonice.',
+              'Aún no hay profesionales en este oficio. Publica la solicitud y avisamos cuando alguien se sintonice.',
               style: TextStyle(color: ink.withValues(alpha: 0.62), height: 1.4),
             )
           else

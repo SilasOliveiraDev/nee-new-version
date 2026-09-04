@@ -37,4 +37,7 @@ class UsersRow {
     payload.removeWhere((_, value) => value == null);
     return payload;
   }
+
+  static bool isDeleted(Map<String, dynamic>? row) =>
+      row != null && row['isDeletado'] == true;
 }

@@ -29,12 +29,14 @@ class _InboxScreenState extends State<InboxScreen> {
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      widget.state.refreshInbox(
+      await widget.state.refreshInbox(
         filter: _filter,
         silent: widget.state.inbox.isNotEmpty,
       );
+      if (!mounted) return;
+      await widget.state.markAllNoticesRead();
     });
   }
 

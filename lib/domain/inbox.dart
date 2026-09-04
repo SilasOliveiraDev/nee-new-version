@@ -117,7 +117,7 @@ class InboxNotice {
       relatedId: relatedId,
       relatedEntityType: row['related_entity_type'] as String?,
       cta: fallbackCta ?? row['cta'] as String?,
-      read: row['is_read'] == true || row['read_at'] != null,
+      read: noticeIsReadFromRow(row),
       readAt: DateTime.tryParse('${row['read_at'] ?? ''}'),
       createdAt:
           DateTime.tryParse('${row['created_at'] ?? ''}') ?? DateTime.now(),
@@ -313,6 +313,19 @@ class NoticeRouting {
   final NoticeTarget target;
 }
 
+bool noticeIsReadFromRow(Map<String, dynamic> row) {
+  final flag = row['is_read'];
+  if (flag == true || flag == 1 || flag == '1') return true;
+  if (flag is String) {
+    final normalized = flag.trim().toLowerCase();
+    if (normalized == 't' || normalized == 'true') return true;
+  }
+  final at = row['read_at'];
+  if (at == null) return false;
+  final text = '$at'.trim();
+  return text.isNotEmpty && text.toLowerCase() != 'null';
+}
+
 NoticeRouting inferNoticeRouting({
   required String kind,
   required String title,
@@ -335,7 +348,9 @@ NoticeRouting inferNoticeRouting({
   }
   if (blob.contains('mensaje') ||
       kind.toLowerCase() == 'chat' ||
-      kind.toLowerCase() == 'message') {
+      kind.toLowerCase() == 'message' ||
+      kind.toLowerCase() == 'chat_message' ||
+      kind.toLowerCase() == 'new_message') {
     return const NoticeRouting(
       NoticeCategory.message,
       NoticeAction.newMessage,

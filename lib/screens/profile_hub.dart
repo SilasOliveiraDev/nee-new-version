@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app_state.dart';
+import '../client/account_gate.dart';
 import '../data/account_repository.dart';
+import '../domain/guest_intent.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import '../widgets/nee_sheets.dart';
@@ -32,7 +34,7 @@ class ClientProfileScreen extends StatelessWidget {
               Center(child: ProfileAvatar(user: user, radius: 44)),
               const SizedBox(height: 12),
               Text(
-                user.fullName,
+                state.isGuest ? 'Invitado' : user.fullName,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
@@ -43,12 +45,26 @@ class ClientProfileScreen extends StatelessWidget {
                   style: const TextStyle(color: NeeColors.muted),
                 ),
               const SizedBox(height: 12),
-              Center(
-                child: TextButton(
-                  onPressed: () => _open(context, ProfileDataScreen(state: state)),
-                  child: const Text('Editar perfil'),
+              if (state.isGuest)
+                Center(
+                  child: FilledButton(
+                    onPressed: () => ensureAccount(
+                      context,
+                      state: state,
+                      intent: const GuestIntent(
+                        kind: GuestIntentKind.profileEdit,
+                      ),
+                    ),
+                    child: const Text('Crear cuenta'),
+                  ),
+                )
+              else
+                Center(
+                  child: TextButton(
+                    onPressed: () => _open(context, ProfileDataScreen(state: state)),
+                    child: const Text('Editar perfil'),
+                  ),
                 ),
-              ),
               const SizedBox(height: 20),
               _Group(
                 title: 'Desafíos',
@@ -58,7 +74,7 @@ class ClientProfileScreen extends StatelessWidget {
                     trailing: state.openChallengeCount == 0
                         ? 'Hoy listo'
                         : '${state.openChallengeCount} por hacer',
-                    onTap: () => _open(
+                    onTap: () => _openGated(
                       context,
                       DailyChallengesScreen(state: state),
                     ),
@@ -70,15 +86,15 @@ class ClientProfileScreen extends StatelessWidget {
                 children: [
                   _Row(
                     label: 'Mis datos',
-                    onTap: () => _open(context, ProfileDataScreen(state: state)),
+                    onTap: () => _openGated(context, ProfileDataScreen(state: state)),
                   ),
                   _Row(
                     label: 'Mis direcciones',
-                    onTap: () => _open(context, AddressesManagerScreen(state: state)),
+                    onTap: () => _openGated(context, AddressesManagerScreen(state: state)),
                   ),
                   _Row(
                     label: 'Seguridad',
-                    onTap: () => _open(context, SecurityScreen(state: state)),
+                    onTap: () => _openGated(context, SecurityScreen(state: state)),
                   ),
                 ],
               ),
@@ -87,7 +103,7 @@ class ClientProfileScreen extends StatelessWidget {
                 children: [
                   _Row(
                     label: 'Notificaciones',
-                    onTap: () => _open(context, NotificationsScreen(state: state)),
+                    onTap: () => _openGated(context, NotificationsScreen(state: state)),
                   ),
                   _Row(
                     label: 'Idioma',
@@ -112,7 +128,7 @@ class ClientProfileScreen extends StatelessWidget {
                   ),
                   _Row(
                     label: 'Contactar soporte',
-                    onTap: () => _open(context, TicketsScreen(state: state)),
+                    onTap: () => _openGated(context, TicketsScreen(state: state)),
                   ),
                 ],
               ),
@@ -134,23 +150,37 @@ class ClientProfileScreen extends StatelessWidget {
                   const _Row(label: 'Versión de la aplicación', trailing: '1.0.0 (1)'),
                 ],
               ),
-              const SizedBox(height: 16),
-              OutlinedButton(
-                onPressed: () => _logout(context),
-                child: const Text('Cerrar sesión'),
-              ),
-              TextButton(
-                onPressed: () => _delete(context),
-                child: const Text(
-                  'Eliminar cuenta',
-                  style: TextStyle(color: NeeColors.waiting),
+              if (!state.isGuest) ...[
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  onPressed: () => _logout(context),
+                  child: const Text('Cerrar sesión'),
                 ),
-              ),
+                TextButton(
+                  onPressed: () => _delete(context),
+                  child: const Text(
+                    'Eliminar cuenta',
+                    style: TextStyle(color: NeeColors.waiting),
+                  ),
+                ),
+              ],
             ],
           ),
         );
       },
     );
+  }
+
+  Future<void> _openGated(BuildContext context, Widget page) async {
+    if (state.isGuest) {
+      final ok = await ensureAccount(
+        context,
+        state: state,
+        intent: const GuestIntent(kind: GuestIntentKind.profileEdit),
+      );
+      if (!ok || !context.mounted) return;
+    }
+    return _open(context, page);
   }
 
   Future<void> _open(BuildContext context, Widget page) {
@@ -167,7 +197,7 @@ class ClientProfileScreen extends StatelessWidget {
       destructivePrimary: true,
     );
     if (!ok || !context.mounted) return;
-    state.restartOnboarding();
+    await state.restartOnboarding();
   }
 
   Future<void> _delete(BuildContext context) async {
@@ -175,7 +205,7 @@ class ClientProfileScreen extends StatelessWidget {
       context,
       title: '¿Eliminar tu cuenta?',
       body:
-          'Esta acción puede eliminar permanentemente tus datos y el acceso a tu cuenta.',
+          'Vamos a borrar tu acceso. No podrás entrar de nuevo con este correo ni teléfono.',
       cta: 'Continuar',
     );
     if (!first || !context.mounted) return;
@@ -183,13 +213,19 @@ class ClientProfileScreen extends StatelessWidget {
       context,
       title: 'Confirmar eliminación',
       body:
-          'Tus solicitudes anteriores conservan el snapshot del servicio. No podrás entrar de nuevo con esta cuenta.',
+          'Esta acción no se puede deshacer. Tus solicitudes anteriores conservan el snapshot del servicio, sin tus datos personales.',
       primary: 'Eliminar cuenta',
       secondary: 'Cancelar',
       destructivePrimary: true,
     );
     if (!confirm || !context.mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
     final ok = await AccountRepository.deleteAccount();
+    if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
     if (!context.mounted) return;
     if (!ok) {
       await showErrorSheet(
@@ -199,7 +235,7 @@ class ClientProfileScreen extends StatelessWidget {
       );
       return;
     }
-    state.restartOnboarding();
+    await state.restartOnboarding();
   }
 }
 

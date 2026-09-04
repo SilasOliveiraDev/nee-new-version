@@ -237,6 +237,24 @@ BEGIN
         status = 'Cancelado por el profesional',
         disponivel = false
     WHERE id = p_request_id;
+    SELECT c.id INTO conv_id
+    FROM public.service_conversations c
+    WHERE c.request_id = p_request_id::text
+      AND c.professional_id = uid
+    LIMIT 1;
+    IF conv_id IS NOT NULL THEN
+      INSERT INTO public.service_chat_messages (
+        conversation_id, sender_type, message_type, content, delivery_status, metadata
+      ) VALUES (
+        conv_id, 'SYSTEM', 'SYSTEM',
+        'El profesional no puede atender esta solicitud.',
+        'SENT',
+        jsonb_build_object('system_event', jsonb_build_object('type', 'DIRECT_DECLINED', 'occurred_at', now()))
+      );
+      UPDATE public.service_conversations
+      SET mode = 'CANCELLED', status = 'CLOSED', updated_at = now()
+      WHERE id = conv_id;
+    END IF;
     PERFORM public.notify_service_inbox(
       req.client_id,
       'DIRECT_DECLINED',
@@ -312,6 +330,10 @@ BEGIN
   SELECT * INTO req FROM public.service_requests WHERE id = p_request_id FOR UPDATE;
   IF NOT FOUND OR req.client_id IS DISTINCT FROM uid THEN
     RAISE EXCEPTION 'forbidden';
+  END IF;
+  IF req.direct_status IS DISTINCT FROM 'NEGOTIATION'
+     AND req.direct_status IS DISTINCT FROM 'PENDING_CONFIRMATION' THEN
+    RAISE EXCEPTION 'invalid_state';
   END IF;
 
   start_at := COALESCE(req.requested_start, now());

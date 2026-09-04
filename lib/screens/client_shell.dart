@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../client/account_gate.dart';
 import '../client/air_query.dart';
+import '../client/catalog_query.dart';
 import '../client/nee_adaptive_nav.dart';
 import '../client/nee_category_strip.dart';
 import '../client/nee_motion.dart';
 import '../client/nee_on_air_tile.dart';
 import '../client/nee_status_pill.dart';
+import '../client/trade_picker.dart';
+import '../domain/guest_intent.dart';
+import '../domain/availability.dart';
 import '../domain/chat.dart';
 import '../models.dart';
 import '../domain/request_lifecycle.dart';
@@ -15,6 +20,7 @@ import '../widgets.dart';
 import 'buscar_servicio_flow.dart';
 import 'chat_thread_screen.dart';
 import 'client_map_screen.dart';
+import 'direct_confirm_flow.dart';
 import 'direct_hire_flow.dart';
 import 'inbox_screen.dart';
 import 'professional_profile_screen.dart';
@@ -140,8 +146,19 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   ),
                 ),
                 IconButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
+                  onPressed: () async {
+                    if (widget.state.isGuest) {
+                      final ok = await ensureAccount(
+                        context,
+                        state: widget.state,
+                        intent: const GuestIntent(
+                          kind: GuestIntentKind.messages,
+                        ),
+                      );
+                      if (!ok || !context.mounted) return;
+                    }
+                    if (!context.mounted) return;
+                    await Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => InboxScreen(state: widget.state),
                       ),
@@ -190,8 +207,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                 ),
                 const SizedBox(height: 22),
                 NeeCategoryStrip(
-                  categories: widget.state.catalog,
+                  categories: spotlightCategories(widget.state.catalog),
                   onTap: (category) => _openRequest(context, category),
+                  onSeeAll: () => _pickTrade(context),
                 ),
                 const SizedBox(height: 8),
                 if (nearby.isNotEmpty) ...[
@@ -284,6 +302,15 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   Future<void> _openRequest(BuildContext context, ServiceCategory? category) {
     return openBuscarServicio(context, state: widget.state, category: category);
+  }
+
+  Future<void> _pickTrade(BuildContext context) async {
+    final picked = await showTradePicker(
+      context,
+      catalog: widget.state.catalog,
+    );
+    if (!context.mounted || picked == null) return;
+    await _openRequest(context, picked);
   }
 
   void _openPro(BuildContext context, Professional pro) {
@@ -448,7 +475,11 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen> {
             return true;
           }).toList();
 
-          return ListView(
+          return RefreshIndicator(
+            color: NeeColors.vest,
+            onRefresh: widget.state.refreshClientWorkspace,
+            child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 88),
             children: [
               Text(
@@ -498,7 +529,16 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              if (items.isEmpty)
+              if (widget.state.isGuest)
+                _GuestActionPrompt(
+                  body:
+                      'Crea tu cuenta para publicar una solicitud y ver su estado aquí.',
+                  onPressed: () => openBuscarServicio(
+                    context,
+                    state: widget.state,
+                  ),
+                )
+              else if (items.isEmpty)
                 Text(
                   history
                       ? 'Aún no hay solicitudes en el historial. Las finalizadas y canceladas aparecen aquí.'
@@ -508,11 +548,13 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen> {
                         .withValues(alpha: 0.62),
                   ),
                 ),
-              for (final request in items) ...[
+              if (!widget.state.isGuest)
+                for (final request in items) ...[
                 _SolicitudCard(request: request, state: widget.state),
                 const SizedBox(height: 12),
               ],
             ],
+          ),
           );
         },
       ),
@@ -612,65 +654,79 @@ class ClientMessagesScreen extends StatelessWidget {
         final active = threads.where((t) => t.canSend).toList();
         final history = threads.where((t) => !t.canSend).toList();
         return SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-                child: Text(
-                  'Mensajes',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-              ),
-              if (threads.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(24, 12, 24, 32),
+          child: RefreshIndicator(
+            color: NeeColors.vest,
+            onRefresh: state.refreshClientWorkspace,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(12, 24, 12, 24),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                   child: Text(
-                    'Cuando un profesional envíe una propuesta, puedes escribirle aquí antes de decidir.',
-                    style: TextStyle(color: NeeColors.muted, height: 1.4),
-                  ),
-                )
-              else
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                    children: [
-                      if (active.isNotEmpty)
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(12, 8, 12, 8),
-                          child: Text(
-                            'Activos',
-                            style: TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                      for (final thread in active)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: _ThreadTile(
-                            thread: thread,
-                            onTap: () => _openThread(context, state, thread),
-                          ),
-                        ),
-                      if (history.isNotEmpty)
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(12, 16, 12, 8),
-                          child: Text(
-                            'Historial',
-                            style: TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                      for (final thread in history)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: _ThreadTile(
-                            thread: thread,
-                            onTap: () => _openThread(context, state, thread),
-                          ),
-                        ),
-                    ],
+                    'Mensajes',
+                    style: Theme.of(context).textTheme.headlineMedium,
                   ),
                 ),
-            ],
+                if (state.isGuest)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 32),
+                    child: _GuestActionPrompt(
+                      body:
+                          'Crea tu cuenta para escribir con profesionales y ver tus chats.',
+                      onPressed: () => ensureAccount(
+                        context,
+                        state: state,
+                        intent: const GuestIntent(
+                          kind: GuestIntentKind.messages,
+                        ),
+                      ),
+                    ),
+                  )
+                else if (threads.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(12, 12, 12, 32),
+                    child: Text(
+                      'Cuando envíes una solicitud o un profesional te escriba, el chat aparece aquí.\n\nArrastra hacia abajo para actualizar.',
+                      style: TextStyle(color: NeeColors.muted, height: 1.4),
+                    ),
+                  )
+                else ...[
+                  if (active.isNotEmpty)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(12, 8, 12, 8),
+                      child: Text(
+                        'Activos',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  for (final thread in active)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: _ThreadTile(
+                        thread: thread,
+                        onTap: () => _openThread(context, state, thread),
+                      ),
+                    ),
+                  if (history.isNotEmpty)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(12, 16, 12, 8),
+                      child: Text(
+                        'Historial',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  for (final thread in history)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: _ThreadTile(
+                        thread: thread,
+                        onTap: () => _openThread(context, state, thread),
+                      ),
+                    ),
+                ],
+              ],
+            ),
           ),
         );
       },
@@ -778,6 +834,22 @@ class _SolicitudCard extends StatelessWidget {
   final NeeAppState state;
 
   String? get _extra {
+    if (request.isDirect) {
+      switch (request.directStatus) {
+        case DirectStatus.pending:
+          final first = request.professional?.firstName ?? 'El profesional';
+          return '$first recibió tu solicitud. Ábrela para chatear o cancelar.';
+        case DirectStatus.negotiation:
+          return 'Cuando acuerden, confirma a este profesional.';
+        case DirectStatus.pendingConfirmation:
+          return 'Confirma el servicio cuando el horario te venga bien.';
+        case DirectStatus.expired:
+        case DirectStatus.declined:
+          return 'Busca otro profesional si todavía lo necesitas.';
+        default:
+          break;
+      }
+    }
     switch (request.status) {
       case RequestStatus.sent:
         return 'Mostrando tu solicitud a profesionales cerca';
@@ -811,6 +883,12 @@ class _SolicitudCard extends StatelessWidget {
   }
 
   String get _cta {
+    if (request.canConfirmDirect) {
+      return 'Confirmar profesional';
+    }
+    if (request.isDirect && request.directStatus == DirectStatus.pending) {
+      return 'Abrir chat';
+    }
     switch (request.status) {
       case RequestStatus.sent:
         return 'Ver solicitud';
@@ -874,6 +952,29 @@ class _SolicitudCard extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: FilledButton(
                   onPressed: () {
+                    if (request.canConfirmDirect) {
+                      startDirectConfirm(
+                        context,
+                        state: state,
+                        request: request,
+                      );
+                      return;
+                    }
+                    if (request.isDirect &&
+                        request.directStatus == DirectStatus.pending &&
+                        state.professionalFor(request) != null) {
+                      final professional = state.professionalFor(request)!;
+                      openServiceChat(
+                        context,
+                        state: state,
+                        request: request,
+                        offer: ServiceOffer(
+                          id: 'direct',
+                          professional: professional,
+                        ),
+                      );
+                      return;
+                    }
                     Navigator.of(context).push(
                       NeeTunePage(
                         child: StatusScreen(state: state, request: request),
@@ -895,6 +996,34 @@ class _SolicitudCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _GuestActionPrompt extends StatelessWidget {
+  const _GuestActionPrompt({
+    required this.body,
+    required this.onPressed,
+  });
+
+  final String body;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          body,
+          style: const TextStyle(color: NeeColors.muted, height: 1.4),
+        ),
+        const SizedBox(height: 12),
+        FilledButton(
+          onPressed: onPressed,
+          child: const Text('Crear cuenta'),
+        ),
+      ],
     );
   }
 }

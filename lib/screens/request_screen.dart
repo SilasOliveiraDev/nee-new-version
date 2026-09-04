@@ -118,7 +118,7 @@ class _RequestScreenState extends State<RequestScreen> {
                 );
                 return;
               }
-              final request = widget.state.createRequest(
+              final request = await widget.state.createRequest(
                 category: widget.category,
                 description: text,
                 location: loc,

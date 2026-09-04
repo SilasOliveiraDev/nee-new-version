@@ -370,6 +370,22 @@ class ChatRepository {
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
+          table: 'service_chat_messages',
+          callback: (payload) {
+            onMessage(messageFromRow(payload.newRecord));
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'service_conversations',
+          callback: (payload) {
+            onConversation(payload.newRecord);
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
           table: 'service_conversations',
           callback: (payload) {
             onConversation(payload.newRecord);
@@ -414,14 +430,17 @@ class ChatRepository {
     }
     return ChatMessage(
       id: '${row['id']}',
-      conversationId: '${row['conversation_id']}',
+      conversationId: '${row['conversation_id'] ?? ''}'.trim(),
       senderId: row['sender_id'] as String?,
       senderType: senderFromApi(row['sender_type'] as String?),
       type: typeFromApi(row['message_type'] as String?),
       content: row['content'] as String? ?? '',
       mediaUrl: row['media_url'] as String?,
       clientKey: row['client_key'] as String?,
-      status: deliveryFromApi(row['delivery_status'] as String?),
+      status: deliveryFromApi(
+        row['delivery_status'] as String?,
+        readAt: DateTime.tryParse('${row['read_at'] ?? ''}'),
+      ),
       sentAt: DateTime.tryParse('${row['sent_at'] ?? ''}') ?? DateTime.now(),
       systemEvent: event,
       audience: audience,

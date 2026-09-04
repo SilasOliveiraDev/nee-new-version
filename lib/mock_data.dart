@@ -310,13 +310,19 @@ List<Professional> professionalsFor(String categoryId) {
 List<Professional> professionalsReadyToHelp(
   String categoryId, {
   Iterable<Professional>? catalog,
+  String? categoryName,
 }) {
   final needle = categoryId.toLowerCase();
+  final named = (categoryName ?? '').trim().toLowerCase();
   final list = (catalog ?? const <Professional>[])
       .where((p) => p.canHelpClient)
       .where((p) {
         if (categoryId.isEmpty) return true;
         if (p.categoryId == categoryId) return true;
+        final label = p.categoryLabel.toLowerCase();
+        if (named.isNotEmpty && (label == named || label.contains(named))) {
+          return true;
+        }
         return (p.categoryName ?? '').toLowerCase().contains(needle) ||
             p.specialty.toLowerCase().contains(needle);
       })

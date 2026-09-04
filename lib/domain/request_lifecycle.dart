@@ -1,4 +1,5 @@
 import '../models.dart';
+import 'availability.dart';
 
 class TimelineStep {
   const TimelineStep({
@@ -160,6 +161,104 @@ class RequestLifecycle {
         done: done,
         current: status == RequestStatus.awaitingRating ||
             status == RequestStatus.completed,
+      ),
+    ];
+  }
+
+  static List<TimelineStep> directSteps(
+    DirectStatus? direct,
+    RequestStatus status,
+  ) {
+    if (direct == DirectStatus.declined ||
+        direct == DirectStatus.expired ||
+        direct == DirectStatus.cancelled ||
+        status == RequestStatus.cancelledByCustomer ||
+        status == RequestStatus.cancelledByProfessional ||
+        status == RequestStatus.notCompleted) {
+      return [
+        const TimelineStep(
+          label: 'Solicitud enviada',
+          done: true,
+          current: false,
+        ),
+        TimelineStep(
+          label: direct == DirectStatus.declined ||
+                  status == RequestStatus.cancelledByProfessional
+              ? 'No puede atender'
+              : headline(status),
+          done: true,
+          current: true,
+        ),
+      ];
+    }
+
+    if (direct == DirectStatus.confirmed ||
+        status.index >= RequestStatus.accepted.index) {
+      final selected = status.index >= RequestStatus.accepted.index &&
+          status.index < RequestStatus.cancelledByCustomer.index;
+      final onWay = status.index >= RequestStatus.onTheWay.index;
+      final inCourse = status.index >= RequestStatus.inProgress.index;
+      final done = status == RequestStatus.completed ||
+          status == RequestStatus.awaitingRating;
+      return [
+        const TimelineStep(
+          label: 'Solicitud enviada',
+          done: true,
+          current: false,
+        ),
+        TimelineStep(
+          label: 'Profesional seleccionado',
+          done: selected,
+          current: status == RequestStatus.accepted,
+        ),
+        TimelineStep(
+          label: 'Profesional en camino',
+          done: onWay && status != RequestStatus.accepted,
+          current: status == RequestStatus.onTheWay,
+        ),
+        TimelineStep(
+          label: 'Servicio en curso',
+          done: inCourse && status != RequestStatus.onTheWay,
+          current: status == RequestStatus.inProgress,
+        ),
+        TimelineStep(
+          label: 'Finalizado',
+          done: done,
+          current: status == RequestStatus.awaitingRating ||
+              status == RequestStatus.completed,
+        ),
+      ];
+    }
+
+    final waiting = direct == DirectStatus.pending;
+    final talking = direct == DirectStatus.negotiation ||
+        direct == DirectStatus.pendingConfirmation;
+    final service = direct == DirectStatus.confirmed ||
+        status.index >= RequestStatus.accepted.index;
+
+    return [
+      const TimelineStep(
+        label: 'Solicitud enviada',
+        done: true,
+        current: false,
+      ),
+      TimelineStep(
+        label: 'Esperando respuesta',
+        done: !waiting,
+        current: waiting,
+      ),
+      TimelineStep(
+        label: direct == DirectStatus.pendingConfirmation
+            ? 'Confirmar servicio'
+            : 'Conversando',
+        done: service,
+        current: talking,
+      ),
+      TimelineStep(
+        label: 'Servicio',
+        done: status == RequestStatus.completed ||
+            status == RequestStatus.awaitingRating,
+        current: service && !talking,
       ),
     ];
   }

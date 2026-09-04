@@ -1,5 +1,6 @@
 import '../domain/availability.dart';
 import '../domain/phone_mask.dart';
+import '../domain/review_criteria.dart';
 import '../mock_data.dart';
 import '../models.dart';
 import '../places/geo_match.dart';
@@ -186,6 +187,7 @@ Professional professionalFromUserRow(
     tags: [
       if (serviceArea.isNotEmpty) serviceArea,
     ],
+    criteria: CriteriaAverages.fromRow(row),
   );
 }
 

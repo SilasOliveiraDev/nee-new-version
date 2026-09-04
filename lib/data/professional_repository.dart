@@ -3,8 +3,18 @@ import 'package:flutter/foundation.dart';
 import '../domain/phone_mask.dart';
 import '../mock_data.dart';
 import '../models.dart';
+import '../domain/review_criteria.dart';
+import 'account_repository.dart';
 import 'nee_supabase.dart';
 import 'professional_mapper.dart';
+
+bool isMediaVideo(String url) {
+  final lower = url.toLowerCase();
+  return lower.contains('.mp4') ||
+      lower.contains('.mov') ||
+      lower.contains('.webm') ||
+      lower.contains('video');
+}
 
 class PortfolioWork {
   const PortfolioWork({
@@ -25,11 +35,13 @@ class PublicReview {
     required this.rating,
     this.comment = '',
     this.createdAt,
+    this.criteria,
   });
 
   final double rating;
   final String comment;
   final DateTime? createdAt;
+  final ReviewScores? criteria;
 }
 
 class ProfessionalProfileView {
@@ -157,11 +169,15 @@ class ProfessionalRepository {
         }
       }
       if (row == null) return null;
-      return professionalFromUserRow(
+      final professional = professionalFromUserRow(
         Map<String, dynamic>.from(row),
         originLat: originLat,
         originLng: originLng,
       );
+      final signed = await AccountRepository.signedAvatarUrl(
+        professional.avatarUrl,
+      );
+      return signed == null ? professional : professional.withAvatarUrl(signed);
     } catch (error) {
       debugPrint('Ñee: perfil profissional: $error');
       rethrow;
@@ -170,33 +186,57 @@ class ProfessionalRepository {
 
   static Future<List<PortfolioWork>> portfolioFor(String professionalId) async {
     if (!NeeSupabase.ready || professionalId.isEmpty) return const [];
+    final items = <PortfolioWork>[];
+    final seen = <String>{};
+    try {
+      final files = await NeeSupabase.client.storage
+          .from('avatars')
+          .list(path: '$professionalId/portfolio');
+      for (final file in files) {
+        final name = file.name.trim();
+        if (name.isEmpty || name.startsWith('.')) continue;
+        final path = '$professionalId/portfolio/$name';
+        final url = await AccountRepository.signedAvatarUrl(path);
+        if (url == null || url.isEmpty || !seen.add(path)) continue;
+        items.add(
+          PortfolioWork(
+            id: path,
+            url: url,
+            title: name,
+            isVideo: isMediaVideo(name),
+          ),
+        );
+      }
+    } catch (error) {
+      debugPrint('Ñee: portafolio storage: $error');
+    }
     try {
       final rows = await NeeSupabase.client
           .from('services')
           .select('id, title, imagem, publicado, user_id')
           .eq('user_id', professionalId)
           .eq('publicado', true);
-      final items = <PortfolioWork>[];
       for (final row in rows) {
-        final url = '${row['imagem'] ?? ''}'.trim();
+        var url = '${row['imagem'] ?? ''}'.trim();
         if (url.isEmpty) continue;
-        final lower = url.toLowerCase();
+        if (!url.startsWith('http')) {
+          url = await AccountRepository.signedAvatarUrl(url) ?? url;
+        }
+        final id = 's-${row['id']}';
+        if (!seen.add(id) || !seen.add(url)) continue;
         items.add(
           PortfolioWork(
-            id: '${row['id']}',
+            id: id,
             url: url,
             title: '${row['title'] ?? ''}',
-            isVideo: lower.contains('.mp4') ||
-                lower.contains('.mov') ||
-                lower.contains('video'),
+            isVideo: isMediaVideo(url),
           ),
         );
       }
-      return items;
     } catch (error) {
       debugPrint('Ñee: portafolio: $error');
-      rethrow;
     }
+    return items;
   }
 
   static Future<List<PublicReview>> reviewsFor(String professionalId) async {
@@ -204,7 +244,9 @@ class ProfessionalRepository {
     try {
       final rows = await NeeSupabase.client
           .from('reviews')
-          .select('rating, comment, created_at, is_visible, profissional_id')
+          .select(
+            'rating, comment, created_at, is_visible, profissional_id, rating_quality, rating_conduct, rating_ethics, rating_courtesy, rating_punctuality',
+          )
           .eq('profissional_id', professionalId)
           .eq('is_visible', true)
           .order('created_at', ascending: false)
@@ -216,12 +258,41 @@ class ProfessionalRepository {
               rating: (row['rating'] as num).toDouble(),
               comment: '${row['comment'] ?? ''}'.trim(),
               createdAt: DateTime.tryParse('${row['created_at'] ?? ''}'),
+              criteria: _scoresFromRow(row),
             ),
       ];
     } catch (error) {
       debugPrint('Ñee: opiniones: $error');
       rethrow;
     }
+  }
+
+  static ReviewScores? _scoresFromRow(Map<String, dynamic> row) {
+    int? star(String key) {
+      final n = (row[key] as num?)?.toInt();
+      if (n == null || n < 1 || n > 5) return null;
+      return n;
+    }
+
+    final quality = star('rating_quality');
+    final conduct = star('rating_conduct');
+    final ethics = star('rating_ethics');
+    final courtesy = star('rating_courtesy');
+    final punctuality = star('rating_punctuality');
+    if (quality == null ||
+        conduct == null ||
+        ethics == null ||
+        courtesy == null ||
+        punctuality == null) {
+      return null;
+    }
+    return ReviewScores(
+      quality: quality,
+      conduct: conduct,
+      ethics: ethics,
+      courtesy: courtesy,
+      punctuality: punctuality,
+    );
   }
 
   static Future<ProfessionalProfileView> loadProfile(
@@ -276,7 +347,7 @@ class ProfessionalRepository {
           .select('id, nome, disponivel')
           .eq('disponivel', true)
           .order('id')
-          .limit(40);
+          .limit(200);
       if (rows.isEmpty) return List.of(categories);
       return [
         for (final row in rows)
@@ -290,6 +361,28 @@ class ProfessionalRepository {
     } catch (error) {
       debugPrint('Ñee: categorías: $error');
       rethrow;
+    }
+  }
+
+  static Future<List<String>> loadSubcategories(String categoryId) async {
+    if (!NeeSupabase.ready || categoryId.isEmpty) return const [];
+    final id = int.tryParse(categoryId);
+    if (id == null) return const [];
+    try {
+      final rows = await NeeSupabase.client
+          .from('subcategorias')
+          .select('id, nomeSubCategoria, categoria')
+          .eq('categoria', id)
+          .order('id')
+          .limit(80);
+      return [
+        for (final row in rows)
+          if ('${row['nomeSubCategoria'] ?? ''}'.trim().isNotEmpty)
+            '${row['nomeSubCategoria']}'.trim(),
+      ];
+    } catch (error) {
+      debugPrint('Ñee: subcategorías: $error');
+      return const [];
     }
   }
 }

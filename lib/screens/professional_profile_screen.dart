@@ -6,10 +6,13 @@ import '../data/hire_repository.dart';
 import '../data/nee_supabase.dart';
 import '../data/professional_repository.dart';
 import '../domain/availability.dart';
+import '../domain/review_criteria.dart';
 import '../models.dart';
 import '../client/nee_on_air_tile.dart';
 import '../theme.dart';
 import '../widgets/nee_sheets.dart';
+import '../client/account_gate.dart';
+import '../domain/guest_intent.dart';
 import 'direct_hire_flow.dart';
 
 class ProfessionalProfileScreen extends StatefulWidget {
@@ -76,6 +79,14 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
 
   Future<void> _openWhatsApp(Professional professional) async {
     if (_openingChat) return;
+    if (widget.state.isGuest) {
+      final ok = await ensureAccount(
+        context,
+        state: widget.state,
+        intent: GuestIntent.whatsapp(professional.id),
+      );
+      if (!ok || !mounted) return;
+    }
     if (!professional.verified) {
       await showInformationSheet(
         context,
@@ -272,9 +283,31 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
           const SizedBox(height: 8),
           if (professional.ratingLabel != null)
             Text(professional.ratingLabel!),
+          if (professional.criteria.hasAny) ...[
+            const SizedBox(height: 10),
+            for (final item in ReviewCriteria.items)
+              if (professional.criteria.valueFor(item.id) != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '${item.label}  ★ ${professional.criteria.valueFor(item.id)!.toStringAsFixed(1)}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+          ],
           for (final review in _view!.reviews.take(3)) ...[
             const SizedBox(height: 10),
             Text('⭐ ${review.rating.toStringAsFixed(1)}'),
+            if (review.criteria != null)
+              Text(
+                ReviewCriteria.items
+                    .map(
+                      (item) =>
+                          '${item.label} ${review.criteria!.valueFor(item.id)}',
+                    )
+                    .join(' · '),
+                style: const TextStyle(color: NeeColors.muted, fontSize: 13),
+              ),
             if (review.comment.isNotEmpty)
               Text(review.comment, style: const TextStyle(height: 1.35)),
           ],

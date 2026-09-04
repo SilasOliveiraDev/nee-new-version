@@ -37,6 +37,17 @@ void main() {
     expect(removed.target, NoticeTarget.notificationDetail);
   });
 
+  test('chat notices open the conversation, not a generic sheet', () {
+    final notice = inferNoticeRouting(
+      kind: 'chat_message',
+      title: 'Nuevo mensaje de Ana',
+      body: 'Estoy en camino',
+    );
+    expect(notice.category, NoticeCategory.message);
+    expect(notice.action, NoticeAction.newMessage);
+    expect(notice.target, NoticeTarget.conversation);
+  });
+
   test('formats dates without 298 d', () {
     final now = DateTime(2026, 8, 24, 12);
     expect(
@@ -86,6 +97,18 @@ void main() {
       NoticePeriod.yesterday,
       NoticePeriod.earlier,
     ]);
+  });
+
+  test('noticeIsReadFromRow accepts postgres and json flags', () {
+    expect(noticeIsReadFromRow({'is_read': true}), isTrue);
+    expect(noticeIsReadFromRow({'is_read': 1}), isTrue);
+    expect(noticeIsReadFromRow({'is_read': 't'}), isTrue);
+    expect(noticeIsReadFromRow({'is_read': false}), isFalse);
+    expect(
+      noticeIsReadFromRow({'is_read': false, 'read_at': '2026-08-29T12:00:00Z'}),
+      isTrue,
+    );
+    expect(noticeIsReadFromRow({'is_read': false, 'read_at': null}), isFalse);
   });
 
   test('filter empty copy is specific', () {

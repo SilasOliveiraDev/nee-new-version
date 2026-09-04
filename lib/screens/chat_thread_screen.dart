@@ -1,14 +1,17 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app_state.dart';
-import '../domain/availability.dart';
 import '../domain/chat.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/nee_sheets.dart';
+import '../client/account_gate.dart';
+import '../domain/guest_intent.dart';
+import 'direct_confirm_flow.dart';
 
 Future<void> openServiceChat(
   BuildContext context, {
@@ -16,6 +19,14 @@ Future<void> openServiceChat(
   required ServiceRequest request,
   required ServiceOffer offer,
 }) async {
+  if (state.isGuest) {
+    final ok = await ensureAccount(
+      context,
+      state: state,
+      intent: const GuestIntent(kind: GuestIntentKind.chat),
+    );
+    if (!ok || !context.mounted) return;
+  }
   final thread = await state.openConversation(request, offer);
   if (!context.mounted) return;
   await Navigator.of(context).push(
@@ -46,6 +57,7 @@ class ChatThreadScreen extends StatefulWidget {
 class _ChatThreadScreenState extends State<ChatThreadScreen> {
   final _input = TextEditingController();
   final _scroll = ScrollController();
+  Timer? _sync;
 
   NeeAppState get state => widget.state;
 
@@ -63,11 +75,19 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     if (current != null) {
       state.markThreadRead(current);
       state.loadMessages(current);
+      state.refreshConversation(current.id);
     }
+    _sync = Timer.periodic(const Duration(seconds: 4), (_) {
+      final open = thread;
+      if (open == null) return;
+      state.loadMessages(open);
+      state.markThreadRead(open);
+    });
   }
 
   @override
   void dispose() {
+    _sync?.cancel();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -171,31 +191,16 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
               _ServiceBanner(thread: current, request: request, official: official),
               if (current.status != ConversationStatus.active)
                 _ClosedBanner(status: current.status),
-              if (request?.directStatus == DirectStatus.pendingConfirmation &&
-                  current.canSend)
+              if (request?.canConfirmDirect == true && current.canSend)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: FilledButton(
-                    onPressed: () async {
-                      final result = await state.confirmDirectService(request!);
-                      if (!context.mounted) return;
-                      if (!result.ok) {
-                        await showErrorSheet(
-                          context,
-                          title: 'La disponibilidad cambió',
-                          body: result.nextAvailableAt == null
-                              ? 'Ya hay otro servicio en este horario.'
-                              : 'Próxima disponibilidad: ${AvailabilityView.clock(result.nextAvailableAt!)}',
-                        );
-                        return;
-                      }
-                      await showSuccessSheet(
-                        context,
-                        title: '¡Servicio confirmado! 🎉',
-                        body: 'Ya pueden coordinar la llegada desde Ñee.',
-                      );
-                    },
-                    child: const Text('Confirmar servicio'),
+                    onPressed: () => startDirectConfirm(
+                      context,
+                      state: state,
+                      request: request!,
+                    ),
+                    child: const Text('Confirmar profesional'),
                   ),
                 ),
               Expanded(
@@ -224,6 +229,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                         }
                         return _Bubble(
                           message: message,
+                          mine: message.mineAsCustomer(state.customerId),
                           onRetry: () => state.retryMessage(current, message),
                         );
                       },
@@ -410,14 +416,18 @@ class SystemMessage extends StatelessWidget {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message, required this.onRetry});
+  const _Bubble({
+    required this.message,
+    required this.mine,
+    required this.onRetry,
+  });
 
   final ChatMessage message;
+  final bool mine;
   final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    final mine = message.isMine;
     final time =
         '${message.sentAt.hour.toString().padLeft(2, '0')}:${message.sentAt.minute.toString().padLeft(2, '0')}';
     return Align(
@@ -449,14 +459,19 @@ class _Bubble extends StatelessWidget {
                   ),
                   if (mine) ...[
                     const SizedBox(width: 4),
-                    Text(
-                      _ticks(message.status),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: message.status == DeliveryStatus.read
-                            ? NeeColors.assigned
-                            : NeeColors.muted,
-                      ),
+                    Icon(
+                      message.status == DeliveryStatus.sending
+                          ? Icons.schedule
+                          : message.status == DeliveryStatus.failed
+                              ? Icons.error_outline
+                              : message.status == DeliveryStatus.read ||
+                                    message.status == DeliveryStatus.delivered
+                                  ? Icons.done_all
+                                  : Icons.done,
+                      size: 16,
+                      color: message.status == DeliveryStatus.read
+                          ? const Color(0xFF1F4E8C)
+                          : NeeColors.muted,
                     ),
                   ],
                   if (message.status == DeliveryStatus.failed)
@@ -471,20 +486,6 @@ class _Bubble extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _ticks(DeliveryStatus status) {
-    switch (status) {
-      case DeliveryStatus.sending:
-        return '…';
-      case DeliveryStatus.sent:
-        return '✓';
-      case DeliveryStatus.delivered:
-      case DeliveryStatus.read:
-        return '✓✓';
-      case DeliveryStatus.failed:
-        return '!';
-    }
   }
 }
 

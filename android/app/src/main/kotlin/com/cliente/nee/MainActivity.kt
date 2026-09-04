@@ -1,4 +1,4 @@
-package com.nee.nee
+package com.cliente.nee
 
 import io.flutter.embedding.android.FlutterActivity
 

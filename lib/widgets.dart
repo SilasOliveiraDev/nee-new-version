@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import 'domain/availability.dart';
 import 'domain/request_lifecycle.dart';
 import 'models.dart';
 import 'theme.dart';
@@ -196,13 +197,20 @@ class ProfessionalCard extends StatelessWidget {
 }
 
 class StatusTimeline extends StatelessWidget {
-  const StatusTimeline({super.key, required this.current});
+  const StatusTimeline({
+    super.key,
+    required this.current,
+    this.directStatus,
+  });
 
   final RequestStatus current;
+  final DirectStatus? directStatus;
 
   @override
   Widget build(BuildContext context) {
-    final steps = RequestLifecycle.steps(current);
+    final steps = directStatus != null
+        ? RequestLifecycle.directSteps(directStatus, current)
+        : RequestLifecycle.steps(current);
     return Column(
       children: [
         for (var i = 0; i < steps.length; i++) ...[

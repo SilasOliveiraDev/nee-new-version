@@ -12,14 +12,17 @@ import 'data/inbox_repository.dart';
 import 'data/nee_repository.dart';
 import 'data/nee_supabase.dart';
 import 'data/professional_mapper.dart';
+import 'data/review_repository.dart';
 import 'data/users_row.dart';
 import 'domain/account.dart';
 import 'domain/availability.dart';
 import 'domain/cancellation.dart';
 import 'domain/chat.dart';
 import 'domain/engagement.dart';
+import 'domain/guest_intent.dart';
 import 'domain/inbox.dart';
 import 'domain/request_lifecycle.dart';
+import 'domain/review_criteria.dart';
 import 'mock_data.dart';
 import 'models.dart';
 import 'places/place_models.dart';
@@ -44,6 +47,8 @@ class NeeAppState extends ChangeNotifier {
   final incomingDirect = <ServiceRequest>[];
   String? viewingConversationId;
   int clientNavIndex = 0;
+  var guestBrowsing = false;
+  GuestIntent? pendingIntent;
   var solicitudesHistory = false;
   NotificationPrefs notifPrefs = NotificationPrefs();
   String languageCode = 'es';
@@ -71,7 +76,12 @@ class NeeAppState extends ChangeNotifier {
   int get unreadTotal =>
       threads.fold(0, (sum, thread) => sum + thread.unread);
 
-  bool get needsOnboarding => step != OnboardingStep.done;
+  bool get isGuest =>
+      NeeRepository.sessionUserId == null &&
+      (guestBrowsing || NeeSupabase.ready);
+
+  bool get needsOnboarding =>
+      step != OnboardingStep.done && !guestBrowsing;
 
   List<ServiceRequest> get incomingForPro {
     final mine = user.supabaseUuid;
@@ -124,6 +134,9 @@ class NeeAppState extends ChangeNotifier {
     hydrated = true;
     _forceClient();
     _seedPlacesIfNeeded();
+    if (NeeRepository.sessionUserId != null) {
+      guestBrowsing = false;
+    }
     if (step == OnboardingStep.done) {
       seedDemoSolicitudes();
     }
@@ -133,25 +146,37 @@ class NeeAppState extends ChangeNotifier {
 
   Future<void> _refreshRemote() async {
     await NeeRepository.refreshCancellationContext(this);
-    final own = await NeeRepository.fetchOwnUser();
+    final own = await NeeRepository.fetchOwnUser(includeDeleted: true);
+    if (UsersRow.isDeleted(own)) {
+      await restartOnboarding();
+      return;
+    }
     if (own != null) applyUserRow(own);
     await hydrateAvatar();
     await NeeRepository.loadAddresses(this);
     await NeeRepository.loadFeaturedProfessionals(this);
     await HireRepository.applyStatuses(directory);
-    await NeeRepository.loadClientRequests(this);
-    await refreshIncomingDirect();
-    await hydrateChat();
-    if (customerId != 'local-customer') {
+    if (!isGuest) {
+      await NeeRepository.loadClientRequests(this);
+      await refreshIncomingDirect();
+      await hydrateChat();
+      NeeRepository.subscribeClientRequests(
+        clientId: customerId,
+        onChange: ingestServiceRequestRow,
+      );
+    }
+    if (customerId != 'local-customer' && !isGuest) {
       notifPrefs = await AccountRepository.loadPrefs(customerId);
     }
-    await refreshChallenges();
-    await refreshInbox();
-    InboxRepository.subscribe(
-      userId: customerId,
-      onInsert: ingestInboxNotice,
-      onUpdate: ingestInboxUpdate,
-    );
+    if (!isGuest) {
+      await refreshChallenges();
+      await refreshInbox();
+      InboxRepository.subscribe(
+        userId: customerId,
+        onInsert: ingestInboxNotice,
+        onUpdate: ingestInboxUpdate,
+      );
+    }
     persist();
     notifyListeners();
   }
@@ -237,11 +262,23 @@ class NeeAppState extends ChangeNotifier {
     }
     if (!notice.read) _unreadInboxCount += 1;
     notifyListeners();
+    final kind = notice.kind.toLowerCase();
+    if (kind.contains('direct') ||
+        kind.contains('service') ||
+        kind.contains('solicitud')) {
+      unawaited(refreshClientRequests());
+    }
   }
 
   void ingestInboxUpdate(InboxNotice notice) {
     final index = inbox.indexWhere((item) => item.id == notice.id);
-    if (index >= 0) inbox[index] = notice;
+    if (index < 0) return;
+    final current = inbox[index];
+    if (current.read && !notice.read) {
+      notice.read = true;
+      notice.readAt ??= current.readAt;
+    }
+    inbox[index] = notice;
     notifyListeners();
   }
 
@@ -274,7 +311,93 @@ class NeeAppState extends ChangeNotifier {
     return null;
   }
 
-  Future<void> refreshClientRequests() => NeeRepository.loadClientRequests(this);
+  Future<void> refreshClientRequests() async {
+    await NeeRepository.loadClientRequests(this);
+    notifyListeners();
+  }
+
+  Future<void> refreshClientWorkspace() async {
+    await NeeRepository.loadClientRequests(this);
+    await hydrateChat();
+    await refreshInbox(silent: true);
+    notifyListeners();
+  }
+
+  void ingestServiceRequestRow(Map<String, dynamic> row) {
+    final incoming = NeeRepository.requestFromRow(row);
+    final index = requests.indexWhere(
+      (item) =>
+          (item.remoteId != null && item.remoteId == incoming.remoteId) ||
+          item.id == incoming.id,
+    );
+    if (index < 0) {
+      incoming.professional = _professionalById(incoming.targetProfessionalId);
+      requests.insert(0, incoming);
+      notifyListeners();
+      return;
+    }
+    final current = requests[index];
+    overlayRequest(current, incoming);
+    current.professional ??= _professionalById(current.targetProfessionalId);
+    notifyListeners();
+  }
+
+  void overlayRequest(ServiceRequest current, ServiceRequest incoming) {
+    final declined = incoming.directStatus == DirectStatus.declined ||
+        incoming.status == RequestStatus.cancelledByProfessional;
+    current
+      ..status = incoming.status
+      ..kind = incoming.isDirect ? RequestKind.direct : current.kind
+      ..directStatus = declined
+          ? DirectStatus.declined
+          : (incoming.directStatus ?? current.directStatus)
+      ..targetProfessionalId =
+          incoming.targetProfessionalId ?? current.targetProfessionalId
+      ..declineReason = incoming.declineReason ?? current.declineReason
+      ..agreedPrice = incoming.agreedPrice ?? current.agreedPrice
+      ..agreedDurationMinutes =
+          incoming.agreedDurationMinutes ?? current.agreedDurationMinutes
+      ..serviceLocation = incoming.serviceLocation ?? current.serviceLocation;
+    if (incoming.professional != null) {
+      current.professional = incoming.professional;
+    }
+    if (incoming.offers.isNotEmpty) {
+      current.offers
+        ..clear()
+        ..addAll(incoming.offers);
+    }
+  }
+
+  Professional? _professionalById(String? id) {
+    if (id == null || id.isEmpty) return null;
+    for (final professional in directory) {
+      if (professional.id == id) return professional;
+    }
+    for (final request in requests) {
+      if (request.professional?.id == id) return request.professional;
+    }
+    return null;
+  }
+
+  Professional? professionalFor(ServiceRequest request) {
+    if (request.professional != null) return request.professional;
+    final fromId = _professionalById(request.targetProfessionalId);
+    if (fromId != null) return fromId;
+    for (final thread in threads) {
+      if (!_sameRequest(thread, request)) continue;
+      return Professional(
+        id: thread.professionalId,
+        name: thread.professionalName.isEmpty
+            ? 'Profesional'
+            : thread.professionalName,
+        specialty: request.category.name,
+        categoryId: request.category.id,
+        city: request.location,
+        initials: thread.professionalInitials,
+      );
+    }
+    return null;
+  }
 
   Future<void> refreshConversation(String id) async {
     final remote = await ChatRepository.fetchConversation(id);
@@ -311,7 +434,7 @@ class NeeAppState extends ChangeNotifier {
   Future<void> persist() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('nee_onboarding', jsonEncode(_toJson()));
-    unawaited(NeeRepository.syncUser(this));
+    if (!isGuest) unawaited(NeeRepository.syncUser(this));
   }
 
   void goTo(OnboardingStep value) {
@@ -407,7 +530,18 @@ class NeeAppState extends ChangeNotifier {
   }
 
   List<Professional> readyToHelp(String categoryId) {
-    return professionalsReadyToHelp(categoryId, catalog: directory);
+    String? name;
+    for (final category in catalog) {
+      if (category.id == categoryId) {
+        name = category.name;
+        break;
+      }
+    }
+    return professionalsReadyToHelp(
+      categoryId,
+      catalog: directory,
+      categoryName: name,
+    );
   }
 
   UserPlace? get defaultPlace {
@@ -549,7 +683,11 @@ class NeeAppState extends ChangeNotifier {
   }
 
   Future<void> enterAfterLogin() async {
-    final row = await NeeRepository.fetchOwnUser();
+    final row = await NeeRepository.fetchOwnUser(includeDeleted: true);
+    if (UsersRow.isDeleted(row)) {
+      await restartOnboarding();
+      return;
+    }
     if (row != null) applyUserRow(row);
     await NeeRepository.loadAddresses(this);
     await NeeRepository.loadFeaturedProfessionals(this);
@@ -572,6 +710,7 @@ class NeeAppState extends ChangeNotifier {
   void finishCustomer() {
     user.roles.add(AppRole.customer);
     activeRole = AppRole.customer;
+    guestBrowsing = false;
     step = OnboardingStep.done;
     seedDemoSolicitudes();
     persist();
@@ -641,11 +780,35 @@ class NeeAppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void restartOnboarding() {
-    unawaited(NeeRepository.signOut());
+  void enterAsGuest() {
+    guestBrowsing = true;
+    pendingIntent = null;
+    persist();
+    unawaited(NeeRepository.loadFeaturedProfessionals(this));
+    notifyListeners();
+  }
+
+  void setPendingIntent(GuestIntent? intent) {
+    pendingIntent = intent;
+  }
+
+  GuestIntent? takePendingIntent() {
+    final intent = pendingIntent;
+    pendingIntent = null;
+    return intent;
+  }
+
+  Future<void> restartOnboarding() async {
+    await NeeRepository.signOut();
     threads.clear();
     messagesByConversation.clear();
+    requests.clear();
+    incomingDirect.clear();
+    places.clear();
     clientNavIndex = 0;
+    guestBrowsing = false;
+    pendingIntent = null;
+    user.clearLocal();
     step = OnboardingStep.value;
     persist();
     notifyListeners();
@@ -772,6 +935,7 @@ class NeeAppState extends ChangeNotifier {
     for (final thread in threads) {
       _enrich(thread);
       thread.unread = unread[thread.id] ?? thread.unread;
+      _syncRequestFromConversation(thread, notify: false);
     }
     notifyListeners();
   }
@@ -789,11 +953,40 @@ class NeeAppState extends ChangeNotifier {
         ..lastMessageAt = incoming.lastMessageAt ?? threads[index].lastMessageAt
         ..offerId = incoming.offerId ?? threads[index].offerId;
       _enrich(threads[index]);
+      _syncRequestFromConversation(threads[index], notify: false);
     } else {
       _enrich(incoming);
       threads.insert(0, incoming);
+      _syncRequestFromConversation(incoming, notify: false);
     }
     notifyListeners();
+  }
+
+  void _syncRequestFromConversation(
+    ServiceConversation thread, {
+    bool notify = true,
+  }) {
+    final request = requestForThread(thread);
+    if (request == null) return;
+    switch (thread.mode) {
+      case ConversationMode.negotiation:
+        request.directStatus = DirectStatus.negotiation;
+      case ConversationMode.activeService:
+        request.directStatus ??= DirectStatus.confirmed;
+        if (request.status == RequestStatus.sent) {
+          request.status = RequestStatus.accepted;
+        }
+      case ConversationMode.completed:
+        request.status = RequestStatus.completed;
+      case ConversationMode.cancelled:
+        if (request.directStatus != DirectStatus.declined) {
+          request.directStatus = DirectStatus.cancelled;
+        }
+      case ConversationMode.preHire:
+        break;
+    }
+    request.professional ??= professionalFor(request);
+    if (notify) notifyListeners();
   }
 
   void ingestMessage(ChatMessage message) {
@@ -816,7 +1009,7 @@ class NeeAppState extends ChangeNotifier {
       final thread = threads[threadIndex];
       thread.lastPreview = message.content;
       thread.lastMessageAt = message.sentAt;
-      final mine = message.senderId == customerId || message.isMine;
+      final mine = message.mineAsCustomer(customerId);
       if (!mine &&
           !message.isSystem &&
           viewingConversationId != message.conversationId) {
@@ -825,7 +1018,38 @@ class NeeAppState extends ChangeNotifier {
       threads.removeAt(threadIndex);
       threads.insert(0, thread);
     }
+    _applySystemEventToRequest(message);
     notifyListeners();
+  }
+
+  void _applySystemEventToRequest(ChatMessage message) {
+    final event = message.systemEvent;
+    if (event == null || event.isEmpty) return;
+    ServiceRequest? request;
+    for (final thread in threads) {
+      if (thread.id != message.conversationId) continue;
+      request = requestForThread(thread);
+      break;
+    }
+    if (request == null) return;
+    switch (event) {
+      case 'SERVICE_CONFIRMED':
+        request.directStatus = DirectStatus.confirmed;
+        if (request.status.index < RequestStatus.accepted.index) {
+          request.status = RequestStatus.accepted;
+        }
+      case 'PROFESSIONAL_ON_THE_WAY':
+        request.status = RequestStatus.onTheWay;
+      case 'SERVICE_STARTED':
+        request.status = RequestStatus.inProgress;
+      case 'SERVICE_FINISHED':
+        request.status = RequestStatus.awaitingRating;
+      case 'DIRECT_DECLINED':
+        request.directStatus = DirectStatus.declined;
+        request.status = RequestStatus.cancelledByProfessional;
+      default:
+        break;
+    }
   }
 
   Future<ServiceConversation> openConversation(
@@ -852,11 +1076,20 @@ class NeeAppState extends ChangeNotifier {
 
   Future<void> loadMessages(ServiceConversation conversation) async {
     final remote = await ChatRepository.fetchMessages(conversation.id);
-    if (remote.isNotEmpty) {
-      messagesByConversation[conversation.id] = remote;
-    } else {
-      messagesByConversation.putIfAbsent(conversation.id, () => []);
-    }
+    final existing = messagesByConversation[conversation.id] ?? <ChatMessage>[];
+    final pending = [
+      for (final item in existing)
+        if (item.status == DeliveryStatus.sending &&
+            !remote.any(
+              (m) =>
+                  m.id == item.id ||
+                  (item.clientKey != null && m.clientKey == item.clientKey),
+            ))
+          item,
+    ];
+    final merged = [...remote, ...pending]
+      ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+    messagesByConversation[conversation.id] = merged;
     notifyListeners();
   }
 
@@ -952,7 +1185,7 @@ class NeeAppState extends ChangeNotifier {
     await sendText(conversation, message.content);
   }
 
-  ServiceRequest createRequest({
+  Future<ServiceRequest> createRequest({
     required ServiceCategory category,
     required String description,
     required String location,
@@ -969,7 +1202,10 @@ class NeeAppState extends ChangeNotifier {
     DirectStatus? directStatus,
     DateTime? requestedStart,
     DateTime? requestedEnd,
-  }) {
+  }) async {
+    if (isGuest) {
+      throw StateError('GUEST');
+    }
     if (blocksNewSolicitud) {
       throw StateError('CREATE_SERVICE_TEMPORARILY_BLOCKED');
     }
@@ -998,7 +1234,7 @@ class NeeAppState extends ChangeNotifier {
     requests.insert(0, request);
     notifyListeners();
     unawaited(completeChallenge('primera_solicitud'));
-    unawaited(_persistNewRequest(request));
+    await _persistNewRequest(request);
     return request;
   }
 
@@ -1006,6 +1242,18 @@ class NeeAppState extends ChangeNotifier {
     await NeeRepository.insertRequest(this, request);
     if (request.isDirect && request.remoteId != null) {
       await HireRepository.notifyDirect(request.remoteId!);
+      final professional = request.professional;
+      if (professional != null) {
+        final thread = await ChatRepository.upsertConversation(
+          request: request,
+          offer: ServiceOffer(id: 'direct', professional: professional),
+          customerId: customerId,
+        );
+        _enrich(thread);
+        threads.removeWhere((t) => t.id == thread.id);
+        threads.insert(0, thread);
+      }
+      await hydrateChat();
     }
   }
 
@@ -1313,6 +1561,26 @@ class NeeAppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> submitServiceReview(
+    ServiceRequest request, {
+    required ReviewScores scores,
+    String comment = '',
+  }) async {
+    if (request.remoteId != null) {
+      final result = await ReviewRepository.submit(
+        requestId: request.remoteId!,
+        scores: scores,
+        comment: comment,
+      );
+      if (!result.ok) return false;
+    }
+    request.rated = true;
+    request.status = RequestStatus.completed;
+    confirmCompleted(request);
+    notifyAndSave();
+    return true;
+  }
+
   void confirmCompleted(ServiceRequest request) {
     request.status = RequestStatus.completed;
     final requestKey = request.remoteId?.toString() ?? request.id;
@@ -1467,6 +1735,7 @@ class NeeAppState extends ChangeNotifier {
       'supabaseRowId': user.supabaseRowId,
       'photoPath': user.photoPath,
       'photoUrl': user.photoUrl,
+      'guestBrowsing': guestBrowsing,
       'places': places.map((e) => e.toJson()).toList(),
       'restrictionExpires': createBlock?.expiresAt.toIso8601String(),
       'policyWindow': cancellationPolicy.windowMinutes,
@@ -1485,6 +1754,7 @@ class NeeAppState extends ChangeNotifier {
     if (json['step'] == 'loginPhone' || json['step'] == 'loginOtp') {
       step = OnboardingStep.login;
     }
+    guestBrowsing = json['guestBrowsing'] == true;
     if (json['activeRole'] != null) {
       activeRole = AppRole.values.firstWhere(
         (e) => e.name == json['activeRole'],

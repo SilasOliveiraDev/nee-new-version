@@ -3,7 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app_state.dart';
+import '../client/catalog_query.dart';
+import '../client/trade_picker.dart';
 import '../data/nee_repository.dart';
+import '../data/professional_repository.dart';
 import '../location_service.dart';
 import '../mock_data.dart';
 import '../models.dart';
@@ -12,24 +15,38 @@ import '../widgets.dart';
 import 'password_flow.dart';
 
 class OnboardingScreen extends StatelessWidget {
-  const OnboardingScreen({super.key, required this.state});
+  const OnboardingScreen({
+    super.key,
+    required this.state,
+    this.overlay = false,
+  });
 
   final NeeAppState state;
+  final bool overlay;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: state,
       builder: (context, _) {
+        if (overlay && state.step == OnboardingStep.done) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted && Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+          });
+        }
         switch (state.step) {
           case OnboardingStep.splash:
-            return _SplashStep(state: state);
+            return overlay
+                ? _ValueStep(state: state)
+                : _SplashStep(state: state);
           case OnboardingStep.value:
             return _ValueStep(state: state);
           case OnboardingStep.login:
-            return _LoginStep(state: state);
+            return _LoginStep(state: state, overlay: overlay);
           case OnboardingStep.signup:
-            return _SignUpStep(state: state);
+            return _SignUpStep(state: state, overlay: overlay);
           default:
             return _OnboardingBody(state: state);
         }
@@ -108,6 +125,11 @@ class _ValueStep extends StatelessWidget {
                 onPressed: () => state.goTo(OnboardingStep.login),
                 child: const Text('Iniciar sesión'),
               ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: state.enterAsGuest,
+                child: const Text('Explorar sin cuenta'),
+              ),
             ],
           ),
         ),
@@ -117,8 +139,9 @@ class _ValueStep extends StatelessWidget {
 }
 
 class _LoginStep extends StatefulWidget {
-  const _LoginStep({required this.state});
+  const _LoginStep({required this.state, this.overlay = false});
   final NeeAppState state;
+  final bool overlay;
 
   @override
   State<_LoginStep> createState() => _LoginStepState();
@@ -176,7 +199,13 @@ class _LoginStepState extends State<_LoginStep> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => widget.state.goTo(OnboardingStep.value),
+          onPressed: () {
+            if (widget.overlay && Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+              return;
+            }
+            widget.state.goTo(OnboardingStep.value);
+          },
         ),
         title: const NeeLogo(height: 34),
       ),
@@ -240,8 +269,9 @@ class _LoginStepState extends State<_LoginStep> {
 }
 
 class _SignUpStep extends StatefulWidget {
-  const _SignUpStep({required this.state});
+  const _SignUpStep({required this.state, this.overlay = false});
   final NeeAppState state;
+  final bool overlay;
 
   @override
   State<_SignUpStep> createState() => _SignUpStepState();
@@ -298,7 +328,13 @@ class _SignUpStepState extends State<_SignUpStep> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => widget.state.goTo(OnboardingStep.value),
+          onPressed: () {
+            if (widget.overlay && Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+              return;
+            }
+            widget.state.goTo(OnboardingStep.value);
+          },
         ),
         title: const NeeLogo(height: 34),
       ),
@@ -989,37 +1025,102 @@ class _PhotoStepState extends State<_PhotoStep> {
   }
 }
 
-class _CustomerPrefsStep extends StatelessWidget {
+class _CustomerPrefsStep extends StatefulWidget {
   const _CustomerPrefsStep({required this.state});
   final NeeAppState state;
 
   @override
+  State<_CustomerPrefsStep> createState() => _CustomerPrefsStepState();
+}
+
+class _CustomerPrefsStepState extends State<_CustomerPrefsStep> {
+  var loading = false;
+
+  NeeAppState get state => widget.state;
+
+  List<ServiceCategory> get catalog =>
+      state.catalog.isNotEmpty ? state.catalog : categories;
+
+  List<ServiceCategory> get spotlight => spotlightCategories(catalog);
+
+  @override
+  void initState() {
+    super.initState();
+    _ensureCatalog();
+  }
+
+  Future<void> _ensureCatalog() async {
+    if (state.catalog.length >= 20) return;
+    setState(() => loading = true);
+    try {
+      final list = await ProfessionalRepository.loadCategories();
+      if (list.isNotEmpty) state.catalog = list;
+    } catch (_) {}
+    if (mounted) setState(() => loading = false);
+  }
+
+  void _toggle(ServiceCategory category, bool value) {
+    if (value) {
+      state.user.preferredCategories.add(category.id);
+    } else {
+      state.user.preferredCategories.remove(category.id);
+    }
+    state.notifyAndSave();
+    setState(() {});
+  }
+
+  Future<void> _seeAll() async {
+    final picked = await showTradePicker(context, catalog: catalog);
+    if (picked == null || !mounted) return;
+    if (!state.user.preferredCategories.contains(picked.id)) {
+      state.user.preferredCategories.add(picked.id);
+      state.notifyAndSave();
+    }
+    setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final extras = <ServiceCategory>[];
+    for (final id in state.user.preferredCategories) {
+      if (spotlight.any((item) => item.id == id)) continue;
+      for (final item in catalog) {
+        if (item.id == id) extras.add(item);
+      }
+    }
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
       children: [
         const NeeHeader(
           title: '¿Qué tipo de ayuda sueles necesitar?',
-          subtitle: 'Opcional. Sirve para personalizar tu inicio.',
+          subtitle:
+              'Opcional. Elige lo frecuente; el resto está a un toque en Ver todos.',
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: _seeAll,
+            child: const Text('Ver todos los oficios'),
+          ),
+        ),
+        if (loading) ...[
+          const LinearProgressIndicator(
+            color: NeeColors.vest,
+            backgroundColor: Color(0xFFD8D2C4),
+          ),
+          const SizedBox(height: 12),
+        ],
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final category in categories)
+            for (final category in [...spotlight, ...extras])
               FilterChip(
                 label: Text(category.name),
                 selected: state.user.preferredCategories.contains(category.id),
                 selectedColor: NeeColors.yellow,
-                onSelected: (value) {
-                  if (value) {
-                    state.user.preferredCategories.add(category.id);
-                  } else {
-                    state.user.preferredCategories.remove(category.id);
-                  }
-                  state.notifyAndSave();
-                },
+                onSelected: (value) => _toggle(category, value),
               ),
           ],
         ),

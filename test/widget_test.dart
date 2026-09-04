@@ -24,6 +24,7 @@ void main() {
     );
     expect(find.text('Crear cuenta'), findsOneWidget);
     expect(find.text('Iniciar sesión'), findsOneWidget);
+    expect(find.text('Explorar sin cuenta'), findsOneWidget);
     expect(find.text('Empezar'), findsNothing);
     expect(find.text('Necesito un servicio'), findsNothing);
   });

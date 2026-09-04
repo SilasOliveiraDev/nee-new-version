@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nee/domain/account.dart';
+import 'package:nee/data/users_row.dart';
 
 void main() {
   test('password rules stay simple', () {
@@ -20,5 +21,11 @@ void main() {
     expect(prefs.newOffers, isTrue);
     expect(prefs.requestUpdates, isTrue);
     expect(prefs.toMap('u').containsKey('new_requests'), isFalse);
+  });
+
+  test('deleted user row is detected', () {
+    expect(UsersRow.isDeleted(null), isFalse);
+    expect(UsersRow.isDeleted({'isDeletado': false}), isFalse);
+    expect(UsersRow.isDeleted({'isDeletado': true}), isTrue);
   });
 }

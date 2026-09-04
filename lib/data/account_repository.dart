@@ -182,11 +182,15 @@ class AccountRepository {
     if (!NeeSupabase.ready) return true;
     try {
       await NeeSupabase.client.rpc('delete_my_account');
-      await NeeSupabase.client.auth.signOut();
-      return true;
     } catch (error) {
       debugPrint('Ñee: delete account: $error');
       return false;
     }
+    try {
+      await NeeSupabase.client.auth.signOut();
+    } catch (error) {
+      debugPrint('Ñee: delete account signOut: $error');
+    }
+    return true;
   }
 }

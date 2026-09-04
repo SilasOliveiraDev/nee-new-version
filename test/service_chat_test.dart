@@ -10,7 +10,7 @@ void main() {
       professionalId: 'p1',
     );
     expect(thread.mode, ConversationMode.preHire);
-    expect(thread.badgeLabel, 'Sobre una propuesta');
+    expect(thread.badgeLabel, 'Chat abierto');
     expect(thread.canSend, isTrue);
   });
 
@@ -43,5 +43,25 @@ void main() {
     );
     expect(forPro.visibleFor(asProfessional: true), isTrue);
     expect(forPro.visibleFor(asProfessional: false), isFalse);
+  });
+
+  test('professional messages are never mine on the client', () {
+    final mine = ChatMessage(
+      id: '1',
+      conversationId: 'c',
+      senderId: 'customer-1',
+      senderType: ChatSender.customer,
+      type: ChatMessageType.text,
+    );
+    final theirs = ChatMessage(
+      id: '2',
+      conversationId: 'c',
+      senderId: 'pro-1',
+      senderType: ChatSender.professional,
+      type: ChatMessageType.text,
+    );
+    expect(mine.mineAsCustomer('customer-1'), isTrue);
+    expect(theirs.mineAsCustomer('customer-1'), isFalse);
+    expect(senderFromApi('professional'), ChatSender.professional);
   });
 }

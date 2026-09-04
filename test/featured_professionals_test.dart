@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nee/client/air_query.dart';
 import 'package:nee/data/professional_mapper.dart';
+import 'package:nee/data/professional_repository.dart';
 import 'package:nee/mock_data.dart';
 import 'package:nee/models.dart';
 
@@ -187,5 +188,10 @@ void main() {
     expect(pro.pinApproximate, isTrue);
     expect(pro.longitude, lessThan(-63.18));
     expect(pro.approximatePinLabel, contains('Urubó'));
+  });
+
+  test('detects video files in the public portfolio', () {
+    expect(isMediaVideo('47df/portfolio/0.jpg'), isFalse);
+    expect(isMediaVideo('trabajo.mp4'), isTrue);
   });
 }

@@ -7,6 +7,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app_state.dart';
+import '../client/catalog_query.dart';
+import '../client/trade_picker.dart';
+import '../data/professional_repository.dart';
 import '../mock_data.dart';
 import '../models.dart';
 import '../need_intel.dart';
@@ -15,6 +18,8 @@ import '../service_schedule.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import '../widgets/nee_sheets.dart';
+import '../client/account_gate.dart';
+import '../domain/guest_intent.dart';
 import '../widgets/schedule_picker.dart';
 import 'matching_screen.dart';
 import 'service_place_flow.dart';
@@ -58,6 +63,17 @@ Future<void> openBuscarServicio(
   ServiceCategory? category,
   String query = '',
 }) async {
+  if (state.isGuest) {
+    final ok = await ensureAccount(
+      context,
+      state: state,
+      intent: GuestIntent.buscar(
+        categoryId: category?.id,
+        query: query,
+      ),
+    );
+    if (!ok || !context.mounted) return;
+  }
   if (state.blocksNewSolicitud && state.createBlock != null) {
     await showRestrictionSheet(
       context,
@@ -99,12 +115,15 @@ class _NeedCaptureScreenState extends State<NeedCaptureScreen> {
   late final controller = TextEditingController(text: widget.initialQuery);
   ServiceCategory? category;
   String specialty = '';
+  var specialties = <String>[];
+  var loadingSubs = false;
 
   @override
   void initState() {
     super.initState();
     category = widget.initialCategory;
     controller.addListener(() => setState(() {}));
+    if (category != null) _loadSpecialties(category!);
   }
 
   @override
@@ -116,11 +135,49 @@ class _NeedCaptureScreenState extends State<NeedCaptureScreen> {
   bool get canContinue =>
       controller.text.trim().length >= 8 || category != null;
 
-  List<String> get specialties => NeedIntel.specialtiesOf(category);
+  List<ServiceCategory> get catalog =>
+      widget.state.catalog.isNotEmpty ? widget.state.catalog : categories;
+
+  List<ServiceCategory> get spotlight => spotlightCategories(catalog);
+
+  Future<void> _loadSpecialties(ServiceCategory selected) async {
+    setState(() {
+      loadingSubs = true;
+      specialties = NeedIntel.specialtiesOf(selected);
+    });
+    final remote = await ProfessionalRepository.loadSubcategories(selected.id);
+    if (!mounted) return;
+    setState(() {
+      loadingSubs = false;
+      if (remote.isNotEmpty) specialties = remote;
+    });
+  }
+
+  Future<void> _pickCategory() async {
+    final picked = await showTradePicker(
+      context,
+      catalog: catalog,
+      selected: category,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      category = picked;
+      specialty = '';
+    });
+    await _loadSpecialties(picked);
+  }
+
+  void _selectCategory(ServiceCategory item) {
+    setState(() {
+      category = item;
+      specialty = '';
+    });
+    _loadSpecialties(item);
+  }
 
   void _continue() {
     final text = controller.text.trim();
-    final guessed = category ?? NeedIntel.guessCategory(text);
+    final guessed = category ?? NeedIntel.guessCategory(text, catalog: catalog);
     final saved = widget.state.defaultPlace;
     final snap =
         saved == null ? null : ServiceLocationSnapshot.fromPlace(saved);
@@ -174,33 +231,55 @@ class _NeedCaptureScreenState extends State<NeedCaptureScreen> {
             ),
           ),
           const SizedBox(height: 22),
-          const Text(
-            'Oficios',
-            style: TextStyle(fontWeight: FontWeight.w800),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Oficios frecuentes',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              TextButton(
+                onPressed: _pickCategory,
+                child: const Text('Ver todos'),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 4),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final item in categories)
+              for (final item in spotlight)
                 ChoiceChip(
                   label: Text(item.name),
                   selected: category?.id == item.id,
                   selectedColor: NeeColors.vest,
-                  onSelected: (_) {
-                    setState(() {
-                      category = item;
-                      specialty = '';
-                    });
-                  },
+                  onSelected: (_) => _selectCategory(item),
                 ),
             ],
           ),
+          if (category != null &&
+              spotlight.every((item) => item.id != category!.id)) ...[
+            const SizedBox(height: 10),
+            ChoiceChip(
+              label: Text(category!.name),
+              selected: true,
+              selectedColor: NeeColors.vest,
+              onSelected: (_) {},
+            ),
+          ],
+          if (loadingSubs) ...[
+            const SizedBox(height: 18),
+            const LinearProgressIndicator(
+              color: NeeColors.vest,
+              backgroundColor: Color(0xFFD8D2C4),
+            ),
+          ],
           if (specialties.isNotEmpty) ...[
             const SizedBox(height: 22),
             Text(
-              category == null ? '' : '${category!.name} → especialidad',
+              '${category!.name} → especialidad (opcional)',
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 10),
@@ -208,6 +287,12 @@ class _NeedCaptureScreenState extends State<NeedCaptureScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
+                FilterChip(
+                  label: const Text('Cualquiera'),
+                  selected: specialty.isEmpty,
+                  selectedColor: NeeColors.vest,
+                  onSelected: (_) => setState(() => specialty = ''),
+                ),
                 for (final item in specialties)
                   FilterChip(
                     label: Text(item),
@@ -254,6 +339,7 @@ class ResolveOptionsScreen extends StatelessWidget {
     final matches = professionalsReadyToHelp(
       draft.category?.id ?? '',
       catalog: state.directory,
+      categoryName: draft.category?.name,
     );
     final available = matches.length;
 
@@ -504,7 +590,7 @@ class _PublishRequestFlowState extends State<PublishRequestFlow> {
     final category = draft.category ??
         NeedIntel.guessCategory(draft.description) ??
         categories.first;
-    final request = widget.state.createRequest(
+    final request = await widget.state.createRequest(
       category: category,
       description: draft.description.isEmpty
           ? (draft.hasAudio
@@ -520,6 +606,7 @@ class _PublishRequestFlowState extends State<PublishRequestFlow> {
       hasVideo: draft.hasVideo,
       specialty: draft.specialty,
     );
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => SeekingMatchesScreen(

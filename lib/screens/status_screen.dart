@@ -9,8 +9,11 @@ import '../theme.dart';
 import '../widgets.dart';
 import '../widgets/nee_sheets.dart';
 import 'chat_thread_screen.dart';
+import 'direct_confirm_flow.dart';
 import 'direct_hire_flow.dart';
 import 'professional_profile_screen.dart';
+import 'rate_service_sheet.dart';
+import 'service_arrival_map.dart';
 
 class StatusScreen extends StatefulWidget {
   const StatusScreen({
@@ -30,7 +33,24 @@ class _StatusScreenState extends State<StatusScreen> {
   final _offersKey = GlobalKey();
 
   NeeAppState get state => widget.state;
-  ServiceRequest get request => widget.request;
+  ServiceRequest get request {
+    for (final item in state.requests) {
+      if (item.id == widget.request.id) return item;
+      if (widget.request.remoteId != null &&
+          item.remoteId == widget.request.remoteId) {
+        return item;
+      }
+    }
+    if (widget.request.targetProfessionalId != null) {
+      for (final item in state.requests) {
+        if (item.targetProfessionalId == widget.request.targetProfessionalId &&
+            item.description == widget.request.description) {
+          return item;
+        }
+      }
+    }
+    return widget.request;
+  }
 
   @override
   void initState() {
@@ -44,13 +64,19 @@ class _StatusScreenState extends State<StatusScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: NeeColors.paper,
-      appBar: AppBar(title: const Text('Estado del servicio')),
+      appBar: AppBar(
+        title: Text(request.isDirect ? 'Solicitud directa' : 'Estado del servicio'),
+      ),
       body: ListenableBuilder(
         listenable: state,
         builder: (context, _) {
           final status = request.status;
           final snap = request.serviceLocation;
-          return ListView(
+          return RefreshIndicator(
+            color: NeeColors.vest,
+            onRefresh: state.refreshClientWorkspace,
+            child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
             children: [
               Text(
@@ -91,11 +117,18 @@ class _StatusScreenState extends State<StatusScreen> {
               ],
               const SizedBox(height: 10),
               Text(
+                'Lugar',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 4),
+              Text(
                 [
-                  if ((snap?.neighborhood ?? '').isNotEmpty)
-                    '📍  ${snap!.neighborhood}'
+                  if ((snap?.locationLabel ?? '').isNotEmpty)
+                    snap!.locationLabel
                   else if (request.location.isNotEmpty)
-                    '📍  ${request.location}',
+                    request.location
+                  else
+                    'Ubicación del servicio',
                   if (request.schedule != null) '📅  ${request.schedule!.summary}',
                 ].join('\n'),
                 style: const TextStyle(color: NeeColors.muted, height: 1.4),
@@ -121,10 +154,28 @@ class _StatusScreenState extends State<StatusScreen> {
                     children: _offerCards(context),
                   ),
                 ),
-              if (RequestLifecycle.hasProfessional(status) &&
-                  request.professional != null) ...[
-                ProfessionalCard(professional: request.professional!),
+              if ((RequestLifecycle.hasProfessional(status) ||
+                      (request.isDirect &&
+                          state.professionalFor(request) != null)) &&
+                  (request.professional != null ||
+                      state.professionalFor(request) != null)) ...[
+                ProfessionalCard(
+                  professional:
+                      request.professional ?? state.professionalFor(request)!,
+                ),
                 const SizedBox(height: 16),
+              ],
+              if (_canTrack) ...[
+                const SizedBox(height: 4),
+                ServiceTrackingMap(
+                  request: request,
+                  professional: state.professionalFor(request)!,
+                ),
+                TextButton(
+                  onPressed: () => _openArrivalMap(context),
+                  child: const Text('Ver mapa completo'),
+                ),
+                const SizedBox(height: 8),
               ],
               Text(
                 RequestLifecycle.isClosed(status) &&
@@ -155,25 +206,26 @@ class _StatusScreenState extends State<StatusScreen> {
                   color: NeeColors.surface,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: StatusTimeline(current: status),
+                child: StatusTimeline(
+                  current: status,
+                  directStatus: request.isDirect ? request.directStatus : null,
+                ),
               ),
               const SizedBox(height: 24),
-              if (request.directStatus != DirectStatus.pending &&
-                  (!RequestLifecycle.isClosed(status) ||
-                      status == RequestStatus.awaitingRating ||
-                      (status == RequestStatus.completed && !request.rated)))
+              if (_showPrimary(status))
                 FilledButton(
                   onPressed: () => _primary(context),
                   child: Text(_primaryCtaLabel(status)),
                 ),
               ..._secondaryActions(context, status),
               if (request.directStatus == DirectStatus.declined ||
+                  request.status == RequestStatus.cancelledByProfessional ||
                   request.directStatus == DirectStatus.expired) ...[
                 const SizedBox(height: 8),
                 Text(
                   request.directStatus == DirectStatus.expired
                       ? '${request.professional?.firstName ?? 'El profesional'} no respondió a tiempo.'
-                      : '${request.professional?.firstName ?? 'El profesional'} no puede atender esta solicitud.',
+                      : '${state.professionalFor(request)?.firstName ?? 'El profesional'} no puede atender esta solicitud.',
                   style: const TextStyle(height: 1.35),
                 ),
                 const SizedBox(height: 6),
@@ -191,7 +243,9 @@ class _StatusScreenState extends State<StatusScreen> {
                   child: const Text('Buscar otro profesional'),
                 ),
               ],
-              if (RequestLifecycle.canCancelStatus(status))
+              if (RequestLifecycle.canCancelStatus(status) &&
+                  request.directStatus != DirectStatus.declined &&
+                  request.status != RequestStatus.cancelledByProfessional)
                 TextButton(
                   onPressed: () => _cancel(context),
                   child: Text(
@@ -201,6 +255,7 @@ class _StatusScreenState extends State<StatusScreen> {
                   ),
                 ),
             ],
+          ),
           );
         },
       ),
@@ -209,15 +264,65 @@ class _StatusScreenState extends State<StatusScreen> {
 
   List<Widget> _secondaryActions(BuildContext context, RequestStatus status) {
     switch (status) {
+      case RequestStatus.sent:
+        if (request.isDirect) {
+          return [
+            if (request.canConfirmDirect)
+              TextButton(
+                onPressed: () => _contact(context),
+                child: const Text('Abrir chat'),
+              ),
+            TextButton(
+              onPressed: () => _openProfile(
+                context,
+                state.professionalFor(request),
+              ),
+              child: const Text('Ver perfil'),
+            ),
+            TextButton(
+              onPressed: () => _leaveToSolicitudes(),
+              child: const Text('Ir a mis solicitudes'),
+            ),
+          ];
+        }
+        return const [];
+      case RequestStatus.professionalFound:
+        if (request.isDirect) {
+          return [
+            TextButton(
+              onPressed: () => _contact(context),
+              child: const Text('Abrir chat'),
+            ),
+            TextButton(
+              onPressed: () => _openProfile(
+                context,
+                state.professionalFor(request),
+              ),
+              child: const Text('Ver perfil'),
+            ),
+          ];
+        }
+        return const [];
       case RequestStatus.accepted:
         return [
           TextButton(
-            onPressed: () => _openProfile(context, request.professional),
+            onPressed: () => _openArrivalMap(context),
+            child: const Text('Ver mapa'),
+          ),
+          TextButton(
+            onPressed: () => _openProfile(
+                context,
+                state.professionalFor(request),
+              ),
             child: const Text('Ver perfil'),
           ),
         ];
       case RequestStatus.onTheWay:
         return [
+          TextButton(
+            onPressed: () => _openArrivalMap(context),
+            child: const Text('Ver mapa'),
+          ),
           TextButton(
             onPressed: () => _contact(context),
             child: const Text('Contactar profesional'),
@@ -236,8 +341,13 @@ class _StatusScreenState extends State<StatusScreen> {
   }
 
   String _headline() {
-    final first = request.professional?.firstName ?? 'El profesional';
+    final first =
+        state.professionalFor(request)?.firstName ?? 'El profesional';
     if (request.isDirect) {
+      if (request.directStatus == DirectStatus.declined ||
+          request.status == RequestStatus.cancelledByProfessional) {
+        return '$first no puede atender esta solicitud';
+      }
       switch (request.directStatus) {
         case DirectStatus.pending:
           return 'Solicitud enviada ✓';
@@ -247,8 +357,6 @@ class _StatusScreenState extends State<StatusScreen> {
           return 'Confirmar servicio';
         case DirectStatus.expired:
           return '$first no respondió a tiempo';
-        case DirectStatus.declined:
-          return '$first no puede atender esta solicitud';
         default:
           break;
       }
@@ -256,11 +364,52 @@ class _StatusScreenState extends State<StatusScreen> {
     return request.category.name;
   }
 
-  String _primaryCtaLabel(RequestStatus status) {
-    if (request.directStatus == DirectStatus.pendingConfirmation) {
-      return 'Confirmar servicio';
+  bool get _canTrack {
+    final professional = state.professionalFor(request);
+    if (professional == null) return false;
+    switch (request.status) {
+      case RequestStatus.accepted:
+      case RequestStatus.onTheWay:
+      case RequestStatus.inProgress:
+        return true;
+      default:
+        return false;
     }
-    if (request.isDirect && request.directStatus == DirectStatus.negotiation) {
+  }
+
+  Future<void> _openArrivalMap(BuildContext context) async {
+    final professional = state.professionalFor(request);
+    if (professional == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ServiceArrivalMapScreen(
+          request: request,
+          professional: professional,
+        ),
+      ),
+    );
+  }
+
+  bool _showPrimary(RequestStatus status) {
+    if (request.directStatus == DirectStatus.declined ||
+        request.directStatus == DirectStatus.expired ||
+        request.status == RequestStatus.cancelledByProfessional) {
+      return false;
+    }
+    if (request.isDirect && request.directStatus == DirectStatus.pending) {
+      return true;
+    }
+    if (request.canConfirmDirect) return true;
+    if (!RequestLifecycle.isClosed(status)) return true;
+    return status == RequestStatus.awaitingRating ||
+        (status == RequestStatus.completed && !request.rated);
+  }
+
+  String _primaryCtaLabel(RequestStatus status) {
+    if (request.canConfirmDirect) {
+      return 'Confirmar profesional';
+    }
+    if (request.isDirect && request.directStatus == DirectStatus.pending) {
       return 'Abrir chat';
     }
     return RequestLifecycle.primaryCta(status);
@@ -268,11 +417,15 @@ class _StatusScreenState extends State<StatusScreen> {
 
   String _lead(RequestStatus status) {
     if (request.isDirect) {
+      if (request.directStatus == DirectStatus.declined ||
+          request.status == RequestStatus.cancelledByProfessional) {
+        return 'Podemos ayudarte a encontrar otro profesional.';
+      }
       switch (request.directStatus) {
         case DirectStatus.pending:
           return '${request.professional?.firstName ?? 'El profesional'} recibió tu solicitud. Estamos esperando su respuesta. Te avisaremos cuando responda.';
         case DirectStatus.negotiation:
-          return 'Ahora pueden conversar para coordinar los últimos detalles.';
+          return 'Cuando acuerden, confirma a ${state.professionalFor(request)?.firstName ?? 'este profesional'} para este servicio.';
         case DirectStatus.pendingConfirmation:
           return '${request.professional?.firstName ?? 'El profesional'} está listo para confirmar.';
         case DirectStatus.expired:
@@ -292,9 +445,11 @@ class _StatusScreenState extends State<StatusScreen> {
             ? '1 profesional envió una propuesta'
             : '$n profesionales enviaron una propuesta';
       case RequestStatus.accepted:
-        return '${request.professional?.name ?? 'El profesional'} coordinará el servicio contigo.';
+        return request.isDirect
+            ? '${state.professionalFor(request)?.firstName ?? 'El profesional'} está confirmado. Te avisaremos cuando salga hacia el lugar.'
+            : '${request.professional?.name ?? 'El profesional'} coordinará el servicio contigo.';
       case RequestStatus.onTheWay:
-        return 'El profesional se está desplazando hacia la ubicación.';
+        return '${state.professionalFor(request)?.firstName ?? 'El profesional'} está en camino. Sigue la llegada en el mapa.';
       case RequestStatus.inProgress:
         return 'El servicio está en curso.';
       case RequestStatus.awaitingRating:
@@ -415,15 +570,17 @@ class _StatusScreenState extends State<StatusScreen> {
   }
 
   Future<void> _contact(BuildContext context) async {
-    final professional = request.professional;
+    final professional = state.professionalFor(request);
     if (professional == null) {
       await showInformationSheet(
         context,
         title: 'Chat',
-        body: 'Selecciona un profesional para coordinar el servicio desde Ñee.',
+        body:
+            'El chat aparece en Mensajes. Si no lo ves, arrastra hacia abajo para actualizar.',
       );
       return;
     }
+    request.professional ??= professional;
     ServiceOffer? offer;
     for (final item in request.offers) {
       if (item.professional.id == professional.id) offer = item;
@@ -482,37 +639,11 @@ class _StatusScreenState extends State<StatusScreen> {
 
   Future<void> _primary(BuildContext context) async {
     final status = request.status;
-    if (request.directStatus == DirectStatus.pendingConfirmation) {
-      final result = await state.confirmDirectService(request);
-      if (!context.mounted) return;
-      if (!result.ok && result.error == 'CONFLICT') {
-        final next = result.nextAvailableAt;
-        await showErrorSheet(
-          context,
-          title: '${request.professional?.firstName ?? 'El profesional'} acaba de recibir otro servicio',
-          body: next == null
-              ? 'Su disponibilidad cambió mientras preparabas tu solicitud.'
-              : 'Próxima disponibilidad: ${AvailabilityView.clock(next)}',
-        );
-        return;
-      }
-      if (!result.ok) {
-        await showErrorSheet(
-          context,
-          title: 'No se pudo confirmar',
-          body: 'Inténtalo de nuevo en un momento.',
-        );
-        return;
-      }
-      await showSuccessSheet(
-        context,
-        title: '¡Servicio confirmado! 🎉',
-        body:
-            '${request.professional?.firstName ?? 'El profesional'} realizará tu servicio.',
-      );
+    if (request.canConfirmDirect) {
+      await startDirectConfirm(context, state: state, request: request);
       return;
     }
-    if (request.isDirect && request.directStatus == DirectStatus.negotiation) {
+    if (request.isDirect && request.directStatus == DirectStatus.pending) {
       await _contact(context);
       return;
     }
@@ -538,12 +669,7 @@ class _StatusScreenState extends State<StatusScreen> {
         await _contact(context);
         return;
       case RequestStatus.onTheWay:
-        await showInformationSheet(
-          context,
-          title: 'Llegada',
-          body:
-              'El profesional ya se está desplazando hacia la ubicación del servicio. Te avisaremos cuando esté más cerca.',
-        );
+        await _openArrivalMap(context);
         return;
       case RequestStatus.inProgress:
         await showInformationSheet(
@@ -555,9 +681,26 @@ class _StatusScreenState extends State<StatusScreen> {
         return;
       case RequestStatus.awaitingRating:
       case RequestStatus.completed:
-        request.rated = true;
-        request.status = RequestStatus.completed;
-        state.notifyAndSave();
+        final result = await showRateServiceSheet(
+          context,
+          professionalName:
+              state.professionalFor(request)?.name ?? 'el profesional',
+        );
+        if (result == null || !context.mounted) return;
+        final ok = await state.submitServiceReview(
+          request,
+          scores: result.scores,
+          comment: result.comment,
+        );
+        if (!context.mounted) return;
+        if (!ok) {
+          await showErrorSheet(
+            context,
+            title: 'No se pudo guardar',
+            body: 'Revisa tu conexión e inténtalo otra vez.',
+          );
+          return;
+        }
         await showSuccessSheet(
           context,
           title: 'Gracias',
@@ -711,6 +854,11 @@ class _StatusScreenState extends State<StatusScreen> {
     if (result.restriction != null && context.mounted) {
       await showRestrictionSheet(context, restriction: result.restriction!);
     }
+  }
+
+  void _leaveToSolicitudes() {
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    state.goClientTab(1, history: false);
   }
 
   void _leaveAfterCancel({required bool goHome}) {

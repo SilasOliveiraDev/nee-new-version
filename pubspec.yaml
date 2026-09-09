@@ -70,6 +70,8 @@ flutter:
   assets:
     - assets/brand/nee-logo.png
     - assets/brand/nee-logo-lockup.png
+    - assets/legal/terms.md
+    - assets/legal/privacy.md
 
   # To add assets to your application, add an assets section, like this:
   # assets:

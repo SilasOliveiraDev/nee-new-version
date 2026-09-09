@@ -12,6 +12,7 @@ import '../widgets.dart';
 import '../widgets/nee_sheets.dart';
 import 'account_screens.dart';
 import 'addresses_manager.dart';
+import 'legal_hub_screen.dart';
 import 'daily_challenges_card.dart';
 import 'password_flow.dart';
 import 'tickets_screen.dart';
